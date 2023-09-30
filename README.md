@@ -12,10 +12,9 @@ Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to e
 - **Packet Loss**: Simulate packet loss, a crucial factor in assessing application robustness.
 - **Ingress and Egress Traffic**: Apply conditions to both incoming and outgoing traffic for comprehensive testing.
 
-## Getting Started
+## Compatibility
 
-To get started, clone this repository and follow the installation instructions in the provided [README](#link-to-readme). Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based systems and requires superuser privileges to run.
-
+Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based systems and requires superuser privileges to run.
 
 ## Table of Contents
 
@@ -30,7 +29,7 @@ To get started, clone this repository and follow the installation instructions i
 ## Prerequisites
 
 1. Make sure you have `tc` and `netem` installed on your system.
-3. Root or superuser privileges are required to run the script.
+2. Root or superuser privileges are required to run the script.
 
 ## Installation
 
