@@ -51,7 +51,7 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
     ./latency_ninja.sh [ARGS]
         
     Arguments:
-    -h                   Display this help message.
+    -h                    Display this help message.
     -r                    Rollback any networking conditions changes and redirections.
     -i <interface>        Network interface (e.g., eth0).
     -d <destination_ip>   Destination IP address.
