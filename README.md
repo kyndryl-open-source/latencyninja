@@ -65,6 +65,13 @@ Example: To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 
 
     ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -x 5
 
+Example: To roll back previously applied network conditions, run:
+
+    ./latency_ninja.sh -i eth0 -r
+
+## Warning
+Any changes made by rollback will not persist after a reboot or network restart (yet)
+
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
  - Interface Error: Ensure that the provided network interface exists and is up.
