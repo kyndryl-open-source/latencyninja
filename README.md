@@ -43,6 +43,7 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 	cd latencyninja
 
 3. Give executable permissions to the script
+    
     chmod +x latency_ninja.sh
 
  ## Usage
