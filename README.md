@@ -1,6 +1,21 @@
 # Latency Ninja
 
-Latency Ninja is a wrapper tool for tc/netem that allows you to simulate network conditions like latency, jitter, corruption, duplication, reordering, and packet loss on a given interface to a destination IP address.
+Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to empower you with the ability to finely simulate network conditions on a specified network interface. It goes beyond standard network emulation, allowing you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic. The key advantage of Latency Ninja is its capacity to circumvent the limitations of `tc/netem` which natively applies network conditions only on egress to be able to simulate real life egress and ingress network conditions.
+
+## Key Features
+
+- **Latency Simulation**: Precisely control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
+- **Jitter**: Introduce variability to latency, replicating the unpredictable nature of network traffic.
+- **Corruption**: Safely corrupt a defined percentage of packets to assess network resilience.
+- **Duplication**: Duplicate packets to evaluate network performance under data replication scenarios.
+- **Reordering**: Test how your applications handle out-of-sequence packets with customizable reordering.
+- **Packet Loss**: Simulate packet loss, a crucial factor in assessing application robustness.
+- **Ingress and Egress Traffic**: Apply conditions to both incoming and outgoing traffic for comprehensive testing.
+
+## Getting Started
+
+To get started, clone this repository and follow the installation instructions in the provided [README](#link-to-readme). Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based systems and requires superuser privileges to run.
+
 
 ## Table of Contents
 
@@ -21,7 +36,7 @@ Latency Ninja is a wrapper tool for tc/netem that allows you to simulate network
 
 1. Clone this repository:
 
-    git clone [URL_OF_THIS_REPOSITORY]
+    git clone https://github.com/haythamelkhoja/latencyninja
     
 2. Navigate to the directory
 
