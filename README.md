@@ -1,6 +1,6 @@
 # Latency Ninja
 
-Latency Ninja is a powerful tool that allows you to simulate network conditions like latency, jitter, corruption, duplication, reordering, and packet loss on a given interface to a destination IP address.
+Latency Ninja is a wrapper tool for tc/netem that allows you to simulate network conditions like latency, jitter, corruption, duplication, reordering, and packet loss on a given interface to a destination IP address.
 
 ## Table of Contents
 
