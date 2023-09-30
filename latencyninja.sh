@@ -2,13 +2,12 @@
 
 # Latency Ninja - v0.1alpha
 #
-# Latency Ninja is a wrapper tool for tc/netem to simulate network conditions by applying latency,
+# Latency Ninja is a wrapper tool for tc/netem to simulate network perturbations by applying latency,
 # jitter, packet loss, and more to a single destination IP address.
 # 
 # Features:
-# - Apply network conditions to a single destination IP address.
-# - Apply latency and jitter to an interface.
-# - Simulate packet loss, corruption, duplication, and reordering.
+# - Apply network perturbations to an interface and destination IP address.
+# - Simulate latency, kitter, packet loss, corruption, duplication, and reordering.
 # - Rollback to original network conditions.
 #
 # Copyright (C) 2023 Haytham Elkhoja
@@ -153,10 +152,10 @@ delete_qdisc_if_exists() {
     fi
 }
 
-# Function to roll back network conditions changes
+# Function to roll back network perturbations changes
 rollback_everything() {
     if [ "$rollback_required" -eq 1 ] && [ "$rollback_done" -eq 0 ]; then
-        echo "Rolling back network conditions changes..."        
+        echo "Rolling back network perturbations changes..."        
         tc qdisc del dev "$selected_interface" ingress 2>/dev/null
         tc qdisc del dev "$selected_interface" root 2>/dev/null
         tc qdisc del dev "$ifb0_interface" root 2>/dev/null
@@ -175,7 +174,7 @@ usage() {
     echo "Latency Ninja v0.1alpha"
     echo "Author: Haytham Elkhoja - haytham@elkhoja.com"
     echo
-    echo "This script is designed to emulate network conditions, allowing you to introduce egress and ingress latency "
+    echo "This script is designed to emulate network perturbations, allowing you to introduce egress and ingress latency "
     echo "jitter,  packet loss and moreon specific interfaces for a specific destination IP addresses. This program is distributed " 
     echo "in the hope that it will be useful, but WITHOUT ANY WARRANTY."
     echo 
@@ -258,7 +257,7 @@ parse_arguments(){
             exit 1
         else
             rollback_everything
-            echo "Rolled back network conditions changes for interface $selected_interface."
+            echo "Rolled back network perturbations changes for interface $selected_interface."
             exit 0
         fi
     fi
@@ -311,13 +310,13 @@ display_ping_process() {
     local stage="$1" # Should be 'before' or 'after'
     local host="$2"
 
-    echo "Pinging the destination $stage applying traffic perturbation and jitter:"
+    echo "Pinging the destination $stage applying network perturbation:"
     ping_destination "$host"
     echo
 }
 
 display_apply_params() {
-    echo "Applying network conditions with the following parameters:"
+    echo "Applying network perturbations with the following parameters:"
     echo "  - Interface: $selected_interface"
     echo "  - Destination IP: $destination_ip"
     
@@ -333,7 +332,7 @@ display_apply_params() {
 }
 
 display_after_message() {
-    echo "Network conditions applied for ingress and egress traffic between $source_ip and $destination_ip on interface $selected_interface."
+    echo "Network perturbations applied for ingress and egress traffic between $source_ip and $destination_ip on interface $selected_interface."
     
     # Check each parameter and display if defined
     [ -n "$latency" ] && echo "  - Latency: $latency ms"

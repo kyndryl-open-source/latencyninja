@@ -1,12 +1,12 @@
 # Latency Ninja
 
-Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you with the ability to simulate network conditions on a specified network interface and destination IP address. It allows you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic simultaneously, circumventing the limitations of `tc/netem` that typically would apply rules on egress only.
+Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you with the ability to simulate network perturbations on a specified network interface and destination IP address. It allows you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic simultaneously, circumventing the limitations of `tc/netem` that typically would apply rules on egress only.
 
 ## Key Features
 
-- 🕒 Latency: Precisely control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
+- 🕒 Latency: Control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
 - 🔄 Jitter: Introduce variability to latency, replicating the unpredictable nature of network traffic.
-- 💥 Corruption: Safely corrupt a defined percentage of packets to assess network resilience.
+- 💥 Corruption: Corrupt a defined percentage of packets to assess network and application resilience.
 - ✨ Duplication: Duplicate packets to evaluate network performance under data replication scenarios.
 - 🔀 Reordering: Test how your applications handle out-of-sequence packets with customizable reordering.
 - 📦 Packet Loss: Simulate packet loss, a crucial factor in assessing application robustness.
@@ -25,6 +25,7 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 - [Screenshot](#Screenshot)
 - [Warning](#warning)
 - [Troubleshooting](#troubleshooting)
+- [Roadmap](#Roadmap)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -62,7 +63,7 @@ To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface
 
     ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -x 5
 
-To roll back previously applied network conditions, run:
+To roll back previously applied network perturbations, run:
 
     ./latency_ninja.sh -i eth0 -r
 
@@ -77,6 +78,18 @@ To roll back previously applied network conditions, run:
  - Permission Denied: Make sure you're running the script with superuser privileges.
  - Interface Error: Ensure that the provided network interface exists and is up.
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
+
+## Roadmap
+- Persist network perturbations policies after network interface restart and reboots.
+- Apply rules to egress and ingress seperatly based on user choice.
+- Schedule rollback.
+- Auto download dependencies.
+- Add traffic shaping capabilities.
+- Support and test a wider range of scenarios such as:
+-- Ability to apply rule on entire network range /24 or /16 etc.. 
+-- Ability to apply rule on interface (not only on destination)
+-- Ability to apply rule only on source only
+-- Ability to apply rule on destination/source ports
 
 ## Contributing
 We welcome contributions! If you'd like to contribute, please create a pull request with your changes.
