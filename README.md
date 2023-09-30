@@ -77,7 +77,7 @@ Example: To roll back previously applied network conditions, run:
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
  - Interface Error: Ensure that the provided network interface exists and is up.
- - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, especially when using -l or -j.
+ - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided.
 
 ## Contributing
 We welcome contributions! If you'd like to contribute, please create a pull request with your changes.
