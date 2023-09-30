@@ -1,10 +1,10 @@
 # Latency Ninja
 
-Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to empower you with the ability to finely simulate network conditions on a specified network interface for a destination IP address. It goes beyond standard network emulation, allowing you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic. The key advantage of Latency Ninja is its capacity to circumvent the limitations of `tc/netem`, which natively applies network conditions only on egress and allows you to to simulate real life network conditions on both egress and ingress.
+Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you with the ability to simulate network conditions on a specified network interface and destination IP address. It allows you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic simultaneously, circumventing the limitations of `tc/netem` that typically would apply rules on egress only.
 
 ## Key Features
 
-- **Latency Simulation**: Precisely control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
+- **Latency**: Precisely control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
 - **Jitter**: Introduce variability to latency, replicating the unpredictable nature of network traffic.
 - **Corruption**: Safely corrupt a defined percentage of packets to assess network resilience.
 - **Duplication**: Duplicate packets to evaluate network performance under data replication scenarios.
@@ -34,17 +34,10 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
 ## Installation
 
-1. Clone this repository:
-
     git clone https://github.com/haythamelkhoja/latencyninja
-    
-2. Navigate to the directory
-
-	cd latencyninja
-
-3. Give executable permissions to the script
-    
-    chmod +x latency_ninja.sh
+    cd latencyninja
+    chmod +x latency_ninja.sh    
+    ./latency_ninja.sh [ARGS]
 
  ## Usage
 
