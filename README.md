@@ -1,6 +1,6 @@
 # Latency Ninja
 
-Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to empower you with the ability to finely simulate network conditions on a specified network interface. It goes beyond standard network emulation, allowing you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic. The key advantage of Latency Ninja is its capacity to circumvent the limitations of `tc/netem` which natively applies network conditions only on egress to be able to simulate real life egress and ingress network conditions.
+Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to empower you with the ability to finely simulate network conditions on a specified network interface for a destination IP address. It goes beyond standard network emulation, allowing you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic. The key advantage of Latency Ninja is its capacity to circumvent the limitations of `tc/netem` which natively applies network conditions only on egress to be able to simulate real life egress and ingress network conditions.
 
 ## Key Features
 
@@ -64,14 +64,6 @@ To get started, clone this repository and follow the installation instructions i
 Example: To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
     ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -p 5
-
-## Features
-
- - Latency Simulation: Simulates the amount of delay in the network.
- - Jitter: Adds variability to the latency. 
- - Corruption: Corrupts a given percentage of packets. 
- - Duplication: Duplicates a certain percentage of packets. Reorder: Reorders the sequence of packets. 
- - Packet Loss: Drops a percentage of packets. Rollback: Provides an easy way to revert the applied network conditions. 
 
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
