@@ -22,6 +22,7 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 - [Installation](#installation)
 - [Usage](#usage)
 - [Example](#Example)
+- [Screenshot](#Screenshot)
 - [Warning](#warning)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -57,13 +58,17 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
     -p <num_pings>        Number of pings for the test (default: 5).
 
 ## Example
-Example: To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
+To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
     ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -x 5
 
-Example: To roll back previously applied network conditions, run:
+To roll back previously applied network conditions, run:
 
     ./latency_ninja.sh -i eth0 -r
+
+## Screenshot
+
+<img width="1218" alt="Screenshot" src="https://github.com/haythamelkhoja/latencyninja/assets/450702/935e2baa-1410-4734-8c3e-723aadf544f4">
 
 ## Warning
 - Any changes made by Latency Ninja will not persist after a reboot or a network restart (yet)
