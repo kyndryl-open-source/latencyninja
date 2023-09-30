@@ -6,7 +6,7 @@
 # jitter, packet loss, and more to a single destination IP address.
 # 
 # Features:
-# - Apply traffic perturbance to a single destination IP address.
+# - Apply network conditions to a single destination IP address.
 # - Apply latency and jitter to an interface.
 # - Simulate packet loss, corruption, duplication, and reordering.
 # - Rollback to original network conditions.
@@ -153,10 +153,10 @@ delete_qdisc_if_exists() {
     fi
 }
 
-# Function to roll back Latency changes
+# Function to roll back network conditions changes
 rollback_everything() {
     if [ "$rollback_required" -eq 1 ] && [ "$rollback_done" -eq 0 ]; then
-        echo "Rolling back latency changes..."        
+        echo "Rolling back network conditions changes..."        
         tc qdisc del dev "$selected_interface" ingress 2>/dev/null
         tc qdisc del dev "$selected_interface" root 2>/dev/null
         tc qdisc del dev "$ifb0_interface" root 2>/dev/null
@@ -258,7 +258,7 @@ parse_arguments(){
             exit 1
         else
             rollback_everything
-            echo "Rolled back latency changes for interface $selected_interface."
+            echo "Rolled back network conditions changes for interface $selected_interface."
             exit 0
         fi
     fi
@@ -311,7 +311,7 @@ display_ping_process() {
     local stage="$1" # Should be 'before' or 'after'
     local host="$2"
 
-    echo "Pinging the destination $stage applying latency and jitter:"
+    echo "Pinging the destination $stage applying traffic perturbation and jitter:"
     ping_destination "$host"
     echo
 }
