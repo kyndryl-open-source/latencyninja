@@ -70,7 +70,7 @@ Example: To roll back previously applied network conditions, run:
     ./latency_ninja.sh -i eth0 -r
 
 ## Warning
-Any changes made by rollback will not persist after a reboot or network restart (yet)
+- Any changes made by Latency Ninja will not persist after a reboot or a network restart (yet)
 
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
