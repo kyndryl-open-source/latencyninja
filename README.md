@@ -1,6 +1,6 @@
 # Latency Ninja
 
-Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to empower you with the ability to finely simulate network conditions on a specified network interface for a destination IP address. It goes beyond standard network emulation, allowing you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic. The key advantage of Latency Ninja is its capacity to circumvent the limitations of `tc/netem` which natively applies network conditions only on egress to be able to simulate real life egress and ingress network conditions.
+Latency Ninja is a versatile wrapper tool built around `tc/netem`, designed to empower you with the ability to finely simulate network conditions on a specified network interface for a destination IP address. It goes beyond standard network emulation, allowing you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic. The key advantage of Latency Ninja is its capacity to circumvent the limitations of `tc/netem`, which natively applies network conditions only on egress and allows you to to simulate real life network conditions on both egress and ingress.
 
 ## Key Features
 
