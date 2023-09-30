@@ -4,13 +4,13 @@ Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you
 
 ## Key Features
 
-- **Latency**: Precisely control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
-- **Jitter**: Introduce variability to latency, replicating the unpredictable nature of network traffic.
-- **Corruption**: Safely corrupt a defined percentage of packets to assess network resilience.
-- **Duplication**: Duplicate packets to evaluate network performance under data replication scenarios.
-- **Reordering**: Test how your applications handle out-of-sequence packets with customizable reordering.
-- **Packet Loss**: Simulate packet loss, a crucial factor in assessing application robustness.
-- **Ingress and Egress Traffic**: Apply conditions to both incoming and outgoing traffic for comprehensive testing.
+🕒 Latency: Precisely control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
+🔄 Jitter: Introduce variability to latency, replicating the unpredictable nature of network traffic.
+💥 Corruption: Safely corrupt a defined percentage of packets to assess network resilience.
+✨ Duplication: Duplicate packets to evaluate network performance under data replication scenarios.
+🔀 Reordering: Test how your applications handle out-of-sequence packets with customizable reordering.
+📦 Packet Loss: Simulate packet loss, a crucial factor in assessing application robustness.
+📥 Ingress and 📤 Egress Traffic: Apply conditions to both incoming and outgoing traffic for comprehensive testing.
 
 ## Compatibility
 
