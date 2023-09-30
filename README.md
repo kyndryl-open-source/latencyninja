@@ -45,23 +45,25 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
  ## Usage
 
-    ./latency_ninja.sh [OPTIONS]
+    ./latency_ninja.sh [ARGS]
         
-    Options:
-    -i: The network interface (e.g., eth0). This is mandatory.
-    -d: Destination IP address. This is mandatory if latency or jitter are applied.
-    -l: Latency in milliseconds.
-    -j: Jitter in milliseconds.
-    -c: Corruption in percentage.
-    -u: Duplication in percentage.
-    -r: Reorder in percentage.
-    -p: Packet loss in percentage.
-    -R: Rollback/Revert the applied network conditions.
+    Arguments:
+    -h                   Display this help message.
+    -r                    Rollback any networking conditions changes and redirections.
+    -i <interface>        Network interface (e.g., eth0).
+    -d <destination_ip>   Destination IP address.
+    -l <latency>          Desired latency in milliseconds (e.g., 30).
+    -j <jitter>           Desired jitter in milliseconds (e.g., 3).
+    -x <packet_loss>      Desired packet loss percentage (e.g., 2 for 2%).
+    -y <duplicate>        Desired duplicate packet percentage (e.g., 2 for 2%).
+    -z <corrupt>          Desired corrupted packet percentage (e.g., 1 for 1%).
+    -k <reorder>          Desired packet reordering percentage (e.g., 1 for 1%).
+    -p <num_pings>        Number of pings for the test (default: 5).
 
 ## Example
 Example: To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
-    ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -p 5
+    ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -x 5
 
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
