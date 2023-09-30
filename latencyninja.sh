@@ -310,7 +310,7 @@ display_ping_process() {
     local stage="$1" # Should be 'before' or 'after'
     local host="$2"
 
-    echo "Pinging the destination $stage applying network perturbation:"
+    echo "Pinging the destination $stage applying network perturbations:"
     ping_destination "$host"
     echo
 }
