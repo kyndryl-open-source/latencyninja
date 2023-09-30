@@ -69,7 +69,7 @@ To roll back previously applied network perturbations, run:
 
 ## Screenshot
 
-<img width="1218" alt="Screenshot" src="https://github.com/haythamelkhoja/latencyninja/assets/450702/935e2baa-1410-4734-8c3e-723aadf544f4">
+<img width="1218" alt="Screenshot" src="https://github.com/haythamelkhoja/latencyninja/assets/450702/2da458ed-8ec6-400c-be85-bf448cfd783a">
 
 ## Warning
 - Any changes made by Latency Ninja will not persist after a reboot or a network restart (yet)
