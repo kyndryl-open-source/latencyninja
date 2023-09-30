@@ -183,7 +183,7 @@ usage() {
     echo
     echo "Arguments:"
     echo "  -h                    Display this help message."
-    echo "  -r                    Rollback any latency changes and redirections."
+    echo "  -r                    Rollback any networking conditions changes and redirections."
     echo "  -i <interface>        Network interface (e.g., eth0)."
     echo "  -d <destination_ip>   Destination IP address."
     echo "  -l <latency>          Desired latency in milliseconds (e.g., 30)."
