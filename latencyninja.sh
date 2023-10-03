@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Latency Ninja - v0.1alpha
+# Latency Ninja - v1.0
 #
 # Latency Ninja is a wrapper tool for tc/netem to simulate network perturbations by applying latency,
 # jitter, packet loss, and more to a single destination IP address.
@@ -209,7 +209,7 @@ rollback_everything() {
 # Display usage information
 usage() {
     echo 
-    echo "Latency Ninja v0.2"
+    echo "Latency Ninja v1.0"
     echo "Author: Haytham Elkhoja - haytham@elkhoja.com"
     echo
     echo "This script is designed to emulate network perturbations, allowing you to introduce egress and ingress latency,"
