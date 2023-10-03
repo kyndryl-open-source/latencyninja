@@ -4,17 +4,17 @@ Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you
 
 ## Key Features
 
-🕒 Latency: Control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
-🔄 Jitter: Introduce variability to latency, replicating the unpredictable nature of network traffic.
-💥 Corruption: Corrupt a defined percentage of packets to assess network and application resilience.
-✨ Duplication: Duplicate packets to evaluate network performance under data replication scenarios.
-🔀 Reordering: Test how your applications handle out-of-sequence packets with customizable reordering.
-📦 Packet Loss: Simulate packet loss, a crucial factor in assessing application robustness.
-📥 Ingress Traffic: Apply conditions to incoming traffic.
-📤 Egress Traffic: Apply conditions to outgoing traffic.
-📥 📤 Both Ingress and Egress Traffic: Apply conditions to both incoming and outgoing traffic for comprehensive (real life) testing.
-🎯 Target Destination IP/Network: Specify the destination IP address or network to apply traffic conditions.
-🎯 Target Source IP/Network: Specify the source IP address or network to apply traffic conditions.
+- 🕒 Latency: Control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
+- 🔄 Jitter: Introduce variability to latency, replicating the unpredictable nature of network traffic.
+- 💥 Corruption: Corrupt a defined percentage of packets to assess network and application resilience.
+- ✨ Duplication: Duplicate packets to evaluate network performance under data replication scenarios.
+- 🔀 Reordering: Test how your applications handle out-of-sequence packets with customizable reordering.
+- 📦 Packet Loss: Simulate packet loss, a crucial factor in assessing application robustness.
+- 📥 Ingress Traffic: Apply conditions to incoming traffic.
+- 📤 Egress Traffic: Apply conditions to outgoing traffic.
+- 📥 📤 Both Ingress and Egress Traffic: Apply conditions to both incoming and outgoing traffic for comprehensive (real life) testing.
+- 🎯 Target Destination IP/Network: Specify the destination IP address or network to apply traffic conditions.
+- 🎯 Target Source IP/Network: Specify the source IP address or network to apply traffic conditions.
 
 ## Compatibility
 
