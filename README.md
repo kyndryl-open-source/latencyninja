@@ -4,13 +4,17 @@ Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you
 
 ## Key Features
 
-- 🕒 Latency: Control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
-- 🔄 Jitter: Introduce variability to latency, replicating the unpredictable nature of network traffic.
-- 💥 Corruption: Corrupt a defined percentage of packets to assess network and application resilience.
-- ✨ Duplication: Duplicate packets to evaluate network performance under data replication scenarios.
-- 🔀 Reordering: Test how your applications handle out-of-sequence packets with customizable reordering.
-- 📦 Packet Loss: Simulate packet loss, a crucial factor in assessing application robustness.
-- 📥 Ingress and 📤 Egress Traffic: Apply conditions to both incoming and outgoing traffic for comprehensive testing.
+🕒 Latency: Control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
+🔄 Jitter: Introduce variability to latency, replicating the unpredictable nature of network traffic.
+💥 Corruption: Corrupt a defined percentage of packets to assess network and application resilience.
+✨ Duplication: Duplicate packets to evaluate network performance under data replication scenarios.
+🔀 Reordering: Test how your applications handle out-of-sequence packets with customizable reordering.
+📦 Packet Loss: Simulate packet loss, a crucial factor in assessing application robustness.
+📥 Ingress Traffic: Apply conditions to incoming traffic.
+📤 Egress Traffic: Apply conditions to outgoing traffic.
+📥 📤 Both Ingress and Egress Traffic: Apply conditions to both incoming and outgoing traffic for comprehensive (real life) testing.
+🎯 Target Destination IP/Network: Specify the destination IP address or network to apply traffic conditions.
+🎯 Target Source IP/Network: Specify the source IP address or network to apply traffic conditions.
 
 ## Compatibility
 
@@ -42,21 +46,27 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
     ./latency_ninja.sh [ARGS]
 
  ## Usage
-
-    ./latency_ninja.sh [ARGS]
         
-    Arguments:
-    -h                    Display this help message.
-    -r                    Rollback any networking conditions changes and redirections.
-    -i <interface>        Network interface (e.g., eth0).
-    -d <destination_ip>   Destination IP address.
-    -l <latency>          Desired latency in milliseconds (e.g., 30).
-    -j <jitter>           Desired jitter in milliseconds (e.g., 3).
-    -x <packet_loss>      Desired packet loss percentage (e.g., 2 for 2%).
-    -y <duplicate>        Desired duplicate packet percentage (e.g., 2 for 2%).
-    -z <corrupt>          Desired corrupted packet percentage (e.g., 1 for 1%).
-    -k <reorder>          Desired packet reordering percentage (e.g., 1 for 1%).
-    -p <num_pings>        Number of pings for the test (default: 5).
+    Usage: ./latencyninja.sh -h -r -i <interface> -s <source_ip/network> -d <destination_ip/network> 
+                [-l <latency>] [-j <jitter>] [-x <packet_loss>] [-y <duplicate>] 
+                [-z <corrupt>] [-k <reorder>] [-p <num_pings>]
+
+    Options:
+    -h, --help                      Display this help message.
+    -r, --rollback                  Rollback any networking conditions changes and redirections.
+
+    -i, --interface <interface>     Network interface (e.g., eth0).
+    -s, --src_ip <source_ip>        Source IP/Network. (default: IP of selected interface)
+    -d, --dst_ip <destination_ip>   Destination IP/Network.
+    -w, --direction <direction>     Desired direction of the networking conditions (ingress, egress, or both) (default: egress)
+
+    -l, --latency <latency>         Desired latency in milliseconds (e.g., 30 for 3ms).
+    -j, --jitter <jitter>           Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only.
+    -x, --packet-loss <packet_loss> Desired packet loss percentage (e.g., 1.5 for 1.5%).
+    -y, --duplicate <duplicate>     Desired duplicate packet percentage (e.g., 1 for 1%).
+    -z, --corrupt <corrupt>         Desired corrupted packet percentage (e.g., 5 for 5%).
+    -k, --reorder <reorder>         Desired packet reordering percentage (e.g., 0.9 for 0.9%).
+    -p, --pings <num_pings>         Desired number of pings to test (default: 5).
 
 ## Example
 To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
@@ -81,15 +91,9 @@ To roll back previously applied network perturbations, run:
 
 ## Roadmap
 - Persist network perturbations policies after network interface restart and reboots.
-- Apply rules to egress and ingress seperatly based on user choice.
 - Schedule rollback.
 - Auto download dependencies.
 - Add traffic shaping capabilities.
-- Support and test a wider range of scenarios such as:
--- Ability to apply rule on entire network range /24 or /16 etc.. 
--- Ability to apply rule on interface (not only on destination)
--- Ability to apply rule only on source only
--- Ability to apply rule on destination/source ports
 
 ## Contributing
 We welcome contributions! If you'd like to contribute, please create a pull request with your changes.
