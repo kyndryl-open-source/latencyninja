@@ -1,14 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Latency Ninja - v1.0
+# Latency Ninja - v1.1
 #
 # Latency Ninja is a wrapper tool for tc/netem to simulate network perturbations by applying latency,
 # jitter, packet loss, and more to a single destination IP address.
-# 
-# Features:
-# - Apply network perturbations to an interface and destination IP address.
-# - Simulate latency, kitter, packet loss, corruption, duplication, and reordering.
-# - Rollback to original network conditions.
 #
 # Copyright (C) 2023 Haytham Elkhoja
 #
@@ -30,6 +25,14 @@
 ifb0_interface="ifb0"
 ifb1_interface="ifb1"
 selected_interface=""
+src_ip=""
+dst_ip=""
+latency=""
+jitter=""
+packet_loss=""
+duplicate=""
+corrupt=""
+reorder=""
 direction="egress" # Egress is always selected by default
 interface_provided=0
 jitter_provided=0
@@ -37,47 +40,73 @@ latency_provided=0
 rollback_required=0
 rollback_done=0
 num_pings=5
-debug_flag=0
 
-# Helper function to handle failures
+# Function to handle failures with debug options
 die() {
     local exit_code=$?
     local script_name=${BASH_SOURCE[1]}
     local line_number=${BASH_LINENO[0]}
     local function_name=${FUNCNAME[1]}
 
-    # Check if debug mode is enabled
-    if [ "$debug_flag" -eq 1 ]; then
-        echo -e "Error: An error occurred in function '$function_name' at line $line_number of '$script_name':"
+    local debug_level=0
 
-        if [ -n "$script_name" ] && [ -n "$line_number" ]; then
-            local error_line=$(sed -n "${line_number}p" "$script_name")
-            echo -e "Line $line_number: $error_line" >&2
-        fi
+    # Parse command line options for debug mode
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --debug)
+                case "$2" in
+                    1)
+                        debug_level=1
+                        ;;
+                    2)
+                        debug_level=2
+                        ;;
+                    *)
+                        echo "Invalid debug level: $2" >&2
+                        echo "Usage: $0 --debug [1|2] error_message" >&2
+                        exit 1
+                        ;;
+                esac
+                shift 2
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    # Enable debugging options if needed
+    if [ "$debug_level" -gt 0 ]; then
+        set -e              # Exit on error
+        set -u              # Exit on undefined variable use
+        set -o pipefail     # Ensures that a pipeline returns the exit status of the last command to exit with a non-zero status
     fi
-    if [ "$debug_flag" -eq 2 ]; then
-        echo -e "Error: An error occurred in function '$function_name' at line $line_number of '$script_name':"
 
-        if [ -n "$script_name" ] && [ -n "$line_number" ]; then
-            local error_line=$(sed -n "${line_number}p" "$script_name")
-            echo -e "Line $line_number: $error_line" >&2
-        fi
+    # Display error information
+    printf "Error: An error occurred in function '%s' at line %s of '%s':\n" "$function_name" "$line_number" "$script_name"
+    
+    if [ -n "$script_name" ] && [ -n "$line_number" ]; then
+        local error_line=$(sed -n "${line_number}p" "$script_name")
+        printf "Line %s: %s\n" "$line_number" "$error_line" >&2
+    fi
+    
+    if [ "$debug_level" -eq 2 ]; then
 
         # Display all variables
         for variable in $(set | grep -E '^[a-zA-Z_][a-zA-Z_0-9]*=' | cut -d'=' -f1); do
-            echo -e "$variable=${!variable}" >&2
+            printf "%s=%s\n" "$variable" "${!variable}" >&2
         done
 
         # Display variables passed to the failing function
         local args="$@"
-        echo -e "Variables passed to '$function_name': $args" >&2
+        printf "Variables passed to '%s': %s\n" "$function_name" "$args" >&2
     fi
 
-    echo -e "$1" >&2
+    printf "%s\n" "$1" >&2
     exit 1
 }
 
-# Check for root/sudo privileges
+# Function to check for root/sudo privileges
 check_root() {
     if [ $(id -u) -ne 0 ]; then
        echo -e "\e[31mThis script must be run as root or with sudo privileges\e[0m" 1>&2
@@ -85,21 +114,21 @@ check_root() {
     fi
 }
 
-# Check for necessary Debian/Ubuntu packages
+# Function to check for necessary Debian/Ubuntu packages
 check_debian_packages() {
     local required_packages=("iproute2")
     local cmd=("dpkg-query" "-W" "-f=${Status}")
     check_missing_packages cmd "install ok installed" "${required_packages[@]}"
 }
 
-# Check for necessary CentOS/Fedora/RHEL packages
+# Function to check for necessary CentOS/Fedora/RHEL packages
 check_redhat_packages() {
     local required_packages=("iproute" "kernel-modules-extra" "iproute-tc")
     local cmd=("rpm" "-q")
     check_missing_packages cmd "" "${required_packages[@]}"
 }
 
-# Check for missing packages
+# Function to check for missing packages
 check_missing_packages() {
     local -n check_command_array=$1
     local success_string="$2"
@@ -136,8 +165,8 @@ check_missing_packages() {
     fi
 }
 
-# Check for packages
-check_packages() {
+# Function to check for packages
+detect_os_check_packages() {
     # Detect the OS
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -159,18 +188,18 @@ check_packages() {
     esac
 }
 
-# Load the ifb module
+# Function to load the ifb module
 load_ifb_module() {
     modprobe ifb || die "Failed to load the ifb module."
 }
 
-# Create virtual interfaces if they doesn't exist
+# Function to create virtual interfaces if they doesn't exist
 create_virtual_interface() {
     local interface="$1"
-    ip link show "$interface" &>/dev/null || ip link add "$interface" type ifb
+    ip link add "$interface" type ifb || die "Failed to create $interface."
 }
 
-# Bring up the interfaces
+# Function to bring up the interfaces
 bring_up_interface() {
     local interface="$1"
     ip link set dev "$interface" up || die "Failed to bring up $interface."
@@ -190,7 +219,7 @@ delete_qdisc_if_exists() {
     fi
 }
 
-# Function to roll back network perturbations changes
+# Function to rollback network perturbations changes
 rollback_everything() {
     if [ "$rollback_required" -eq 1 ] && [ "$rollback_done" -eq 0 ]; then
         echo "Rolling back network perturbations changes..."        
@@ -200,20 +229,20 @@ rollback_everything() {
         tc qdisc del dev "$ifb1_interface" root 2>/dev/null
 
         # Set down the virtual interfaces
-        ip link delete dev "$ifb0_interface" down 2>/dev/null
-        ip link delete dev "$ifb1_interface" down 2>/dev/null
+        ip link delete dev "$ifb0_interface" 2>/dev/null
+        ip link delete dev "$ifb1_interface" 2>/dev/null
         rollback_done=1
     fi
 }
 
-# Display usage information
+# Function to display usage information
 usage() {
     echo 
-    echo "Latency Ninja v1.0"
+    echo "Latency Ninja v1.1"
     echo "Author: Haytham Elkhoja - haytham@elkhoja.com"
     echo
     echo "This script is designed to emulate network perturbations, allowing you to introduce egress and ingress latency,"
-    echo "jitter, packet loss, and more on specific interfaces for a specific destination IP address. This program is distributed" 
+    echo "jitter, packet loss, and more on specific interfaces for a specific destination IP address or Network. This program is distributed" 
     echo "in the hope that it will be useful, but WITHOUT ANY WARRANTY."
     echo 
     echo "Usage: $0 -h -r -i <interface> -s <source_ip/network> -d <destination_ip/network> "
@@ -239,6 +268,7 @@ usage() {
     echo
 }
 
+# Function to validate arguments given in latency_ninja.sh 
 validate_arguments() {
     # Check if any options were provided
     if [ $# -eq 0 ]; then
@@ -330,6 +360,7 @@ validate_arguments() {
     done
 }
 
+# Function to parse arguments provided with latency_ninja.sh
 parse_arguments(){
     # Check for rollback after parsing all options
     if [ "$rollback_required" -eq 1 ]; then
@@ -343,6 +374,7 @@ parse_arguments(){
         fi
     fi
 
+    # Set $src_ip if not provided
     if [ -z "$src_ip" ];then
         src_ip=$(ip -o -4 address show dev "$selected_interface" | awk '{print $4}' | cut -d'/' -f1)
     fi
@@ -404,7 +436,7 @@ ping_destination() {
     fi
 }
 
-
+# Function to display ping process
 display_ping_process() {
     local stage="$1" # Should be 'before' or 'after'
     local host="$2"
@@ -414,6 +446,7 @@ display_ping_process() {
     echo
 }
 
+# Function to ping pre/post network perturbations
 pinging() {
     local stage="$1"  # "before" or "after"
     local host="$2"
@@ -429,6 +462,7 @@ pinging() {
     fi
 }
 
+# Function to display parameters that will be applied
 display_apply_params() {
     echo "Applying network perturbations with the following parameters:"
     echo "  - Interface: $selected_interface"
@@ -447,9 +481,10 @@ display_apply_params() {
     echo
 }
 
+# Function to display results
 display_after_message() {
-    echo "Network perturbations applied for ingress and egress traffic between $src_ip and $dst_ip on interface $selected_interface."
-    echo "  - Direction: $direction"   
+    echo "Network perturbations applied between $src_ip and $dst_ip on interface $selected_interface."
+    [ -n "$direction" ] && echo "  - Direction: $direction"   
     [ -n "$latency" ] && echo "  - Latency: $latency ms"
     [ -n "$jitter" ] && echo "  - Jitter: $jitter ms"
     [ -n "$packet_loss" ] && echo "  - Packet Loss: $packet_loss%"     
@@ -487,18 +522,6 @@ validate_ip_format() {
     if ! [[ "$value" =~ $ipv4_regex ]] && ! [[ "$value" =~ $ipv6_regex ]]; then
         usage
         die "Invalid $name format. Please use a valid IPv4 address, IPv6 address, CIDR notation IPv4 network, or CIDR notation IPv6 network for $name."
-    fi
-}
-
-validate_direction(){
-    # Compute the half-latency if latency is applied
-    if [ "$direction" == "both" ]; then
-        # Compute the half-latency if latency is applied
-        if [ ! -z "$latency" ]; then
-            new_latency=$(($latency / 2))
-        else
-            new_latency=$latency
-        fi
     fi
 }
 
@@ -608,10 +631,10 @@ configure_egress_traffic_controls() {
 }
 
 main() {
-    check_root
-    check_packages
     validate_arguments "$@"
     parse_arguments
+    check_root
+    detect_os_check_packages
     load_ifb_module
     pinging "before" "$dst_ip"
     if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then

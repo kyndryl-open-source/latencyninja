@@ -42,8 +42,8 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
     git clone https://github.com/haythamelkhoja/latencyninja
     cd latencyninja
-    chmod +x latency_ninja.sh    
-    ./latency_ninja.sh [ARGS]
+    chmod +x ./latencyninja.sh    
+    ./latencyninja.sh -h
 
  ## Usage
         
