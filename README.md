@@ -2,6 +2,10 @@
 
 Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you with the ability to simulate network perturbations on a specified network interface and destination IP address. It allows you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic simultaneously, circumventing the limitations of `tc/netem` that typically would apply rules on egress only.
 
+The initial releases are attempting to emulate the impact of a WAN (Wide Area Network) between compute nodes so application modelling on can be performed and validated where network latency is a significant component of the transaction turn around.  We focus on the term Round Trip Time (RTT) which is what you measure when you "ping" another machine on a network. RTT is the soum of the forward and reverse latency and is usually measured in milliseconds (ms) and at the scale of Wide Area network is dominated by the speed of light through Silica fibre. Light moves at approximately 200,000km/s through such fibre so for a 1000km run the forward latency is around 5ms and the RTT will be around 10ms. 
+
+To keep it simple we will assume that forward and reverse latency is the same most users will want to run with this assumption. 
+
 ## Key Features
 
 - 🕒 Latency: Control network delay, enabling you to mimic real-world scenarios with adjustable latency settings.
