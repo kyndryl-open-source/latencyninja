@@ -47,35 +47,38 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
  ## Usage
         
-    Usage: ./latencyninja.sh -h -r -i <interface> -s <source_ip/network> -d <destination_ip/network> 
-                [-l <latency>] [-j <jitter>] [-x <packet_loss>] [-y <duplicate>] 
-                [-z <corrupt>] [-k <reorder>] [-p <num_pings>]
-
-    Options:
-    -h, --help                      Display this help message.
-    -r, --rollback                  Rollback any networking conditions changes and redirections.
-
-    -i, --interface <interface>     Network interface (e.g., eth0).
-    -s, --src_ip <source_ip>        Source IP/Network. (default: IP of selected interface)
-    -d, --dst_ip <destination_ip>   Destination IP/Network.
-    -w, --direction <direction>     Desired direction of the networking conditions (ingress, egress, or both) (default: egress)
-
-    -l, --latency <latency>         Desired latency in milliseconds (e.g., 30 for 3ms).
-    -j, --jitter <jitter>           Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only.
-    -x, --packet-loss <packet_loss> Desired packet loss percentage (e.g., 1.5 for 1.5%).
-    -y, --duplicate <duplicate>     Desired duplicate packet percentage (e.g., 1 for 1%).
-    -z, --corrupt <corrupt>         Desired corrupted packet percentage (e.g., 5 for 5%).
-    -k, --reorder <reorder>         Desired packet reordering percentage (e.g., 0.9 for 0.9%).
-    -p, --pings <num_pings>         Desired number of pings to test (default: 5).
-
+    Usage: $0 -i <interface> -d <destination> [OPTIONS]
+    
+    Options:"
+      -h, --help                              Display this help message."
+      -r, --rollback                          Rollback any networking conditions changes and redirections."
+    
+    Required Parameters:"    
+      -i, --interface <interface>             Network interface (e.g., eth0)."
+      -d, --dst_ip <ip1[,ip2,ip3...]>         Destination IP(s) / Network(s) (e.g. 192.168.1.100,192.168.1.102,192.168.1.103)."    
+    
+    Optional Parameters:"
+      -s, --src_ip <source_ip>                Source IP / Network (default: IP of selected interface)."
+      -w, --direction <direction>             Desired direction of the networking conditions (e.g., ingress, egress, or both) (default: both)."
+      -p, --pings <num_pings>                 Desired number of pings to test (default: 5)."  
+    
+    Network Conditions:"    
+      -l, --latency <latency>                 Desired latency in milliseconds (e.g., 30 for 30ms)."
+      -j, --jitter <jitter>                   Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only."
+      -x, --packet-loss <packet_loss>         Desired packet loss percentage (e.g., 2 for 2% or 0.9 for 0.9%)."    
+      -y, --duplicate <duplicate>             Desired duplicate packet percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
+      -z, --corrupt <corrupt>                 Desired corrupted packet percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
+      -k, --reorder <reorder>                 Desired packet reordering percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
+    
 ## Example
 To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
-    ./latency_ninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 10 -x 5
+    ./latencyninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 1.3 -x 5
+    
 
 To roll back previously applied network perturbations, run:
 
-    ./latency_ninja.sh -i eth0 -r
+    ./latencyninja.sh -i eth0 -r
 
 ## Screenshot
 
