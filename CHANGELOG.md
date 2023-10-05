@@ -1,3 +1,12 @@
+CHANGELOG 1.2
+- Added variable versioning
+- Added jitter for both
+- Fixed splitting latency and jitter to suppoer factorials so / 2 = 0.*
+- Changed default direction to 'both' instead of 'egress'
+- Enabled multiple --dst_ip using a -d 192.168.1.100,192.168.1.103, 192.168.101.0/24 format
+- Enhanced usage()
+- Other general enhancements
+
 CHANGELOG 1.1
 - Removed validate_direction() as it was not used.
 - Added more comments for readability and understanding.
