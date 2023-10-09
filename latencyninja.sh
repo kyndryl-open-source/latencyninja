@@ -2,8 +2,7 @@
 
 # Latency Ninja
 #
-# Latency Ninja is a wrapper tool for tc/netem to simulate network perturbations by applying latency,
-# jitter, packet loss, and more to a single destination IP address.
+# Latency Ninja is a wrapper tool for tc/netem to simulate network perturbations by applying latency, jitter, packet loss, and more.
 #
 # Copyright (C) 2023 
 # Haytham Elkhoja
@@ -18,13 +17,10 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc.,
-# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 # Define current version
-current_version="1.2"
+app_name="Lazy Ninja"
+current_version="1.3"
 
 # Define global variables
 ifb0_interface="ifb0"
@@ -44,9 +40,8 @@ jitter_provided=0
 latency_provided=0
 rollback_required=0
 rollback_done=0
-update_required=0
-perform_update=0
 num_pings=5
+DEBUG=false
 
 # Function to handle failures with debug options
 die() {
@@ -54,89 +49,53 @@ die() {
     local script_name=${BASH_SOURCE[1]}
     local line_number=${BASH_LINENO[0]}
     local function_name=${FUNCNAME[1]}
+    local message="$@"
 
-    local debug_level=0
-
-    # Parse command line options for debug mode
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --debug)
-                case "$2" in
-                    1)
-                        debug_level=1
-                        ;;
-                    2)
-                        debug_level=2
-                        ;;
-                    *)
-                        echo "Invalid debug level: $2" >&2
-                        echo "Usage: $0 --debug [1|2] error_message" >&2
-                        exit 1
-                        ;;
-                esac
-                shift 2
-                ;;
-            *)
-                break
-                ;;
-        esac
-    done
-
-    # Enable debugging options if needed
-    if [ "$debug_level" -gt 0 ]; then
-        set -e              # Exit on error
-        set -u              # Exit on undefined variable use
-        set -o pipefail     # Ensures that a pipeline returns the exit status of the last command to exit with a non-zero status
+    if $DEBUG; then
+        # Detailed error information for debugging
+        echo
+        printf "[%s v%s] Debug Error: Function %s at line %s of %s with message:\n%s\n" "$app_name" "$current_version" "$function_name" "$line_number" "$script_name" "$message"
+    else
+        # Basic error information
+        printf "Error: %s \n" "$message"
     fi
 
-    # Display error information
-    printf "Error: An error occurred in function '%s' at line %s of '%s':\n" "$function_name" "$line_number" "$script_name"
-    
-    if [ -n "$script_name" ] && [ -n "$line_number" ]; then
-        local error_line=$(sed -n "${line_number}p" "$script_name")
-        printf "Line %s: %s\n" "$line_number" "$error_line" >&2
-    fi
-    
-    if [ "$debug_level" -eq 2 ]; then
-
-        # Display all variables
-        for variable in $(set | grep -E '^[a-zA-Z_][a-zA-Z_0-9]*=' | cut -d'=' -f1); do
-            printf "%s=%s\n" "$variable" "${!variable}" >&2
-        done
-
-        # Display variables passed to the failing function
-        local args="$@"
-        printf "Variables passed to '%s': %s\n" "$function_name" "$args" >&2
-    fi
-
-    # Execute the rollback_everything function if not in progress
-    if [ $rollback_required -eq 1 ]; then
+    if [[ -n "$rollback_required" ]]; then
         rollback_everything
+        echo "Try again."
     fi
 
-    printf "%s\n" "$1" >&2
-    exit 1
+    exit $exit_code
+}
+
+# Function to check full paths of commands
+ find_command_paths() {    
+    TC_PATH=$(which tc 2>/dev/null)
+    PING_PATH=$(which ping 2>/dev/null)
+    IP_PATH=$(which ip 2>/dev/null)
+    MODPROBE_PATH=$(which modprobe 2>/dev/null)
 }
 
 # Function to check for root/sudo privileges
 check_root() {
-    if [ $(id -u) -ne 0 ]; then
-       echo -e "\e[31mThis script must be run as root or with sudo privileges\e[0m" 1>&2
-       exit 1
+    if [ "$(id -u)" -ne 0 ]; then
+        echo
+        echo -e "This script must be run as root or with sudo privileges." 1>&2
+        exit 1
     fi
 }
 
 # Function to check for necessary Debian/Ubuntu packages
 check_debian_packages() {
-    local required_packages=("iproute2")
-    local cmd=("dpkg-query" "-W" "-f=${Status}")
+    local required_packages=("kmod" "iproute2")
+    local cmd=("/usr/bin/dpkg-query" "-W" "-f=${Status}")
     check_missing_packages cmd "install ok installed" "${required_packages[@]}"
 }
 
 # Function to check for necessary CentOS/Fedora/RHEL packages
 check_redhat_packages() {
-    local required_packages=("iproute" "kernel-modules-extra" "iproute-tc")
-    local cmd=("rpm" "-q")
+    local required_packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc")
+    local cmd=("/usr/bin/rpm" "-q")
     check_missing_packages cmd "" "${required_packages[@]}"
 }
 
@@ -164,13 +123,13 @@ check_missing_packages() {
     if [ ${#missing_packages[@]} -gt 0 ]; then
         case $OS in
             debian|ubuntu)
-                die "The following packages are missing: ${missing_packages[*]}.\nPlease install them using 'sudo apt install ${missing_packages[*]}' and retry."
+                die "The following packages are missing: ${missing_packages[*]}. Please install them using 'sudo apt install ${missing_packages[*]}' and retry."
                 ;;
             centos|fedora|rhel)
-                die "The following packages are missing: ${missing_packages[*]}.\nPlease install them using 'sudo dnf install ${missing_packages[*]}' and retry."
+                die "The following packages are missing: ${missing_packages[*]}. Please install them using 'sudo dnf install ${missing_packages[*]}' and retry."
                 ;;
             *)
-                die "The following packages are missing: ${missing_packages[*]}.\nPlease install and retry."
+                die "The following packages are missing: ${missing_packages[*]}. Please install and retry."
                 ;;
         esac
     fi
@@ -201,19 +160,19 @@ detect_os_check_packages() {
 
 # Function to load the ifb module
 load_ifb_module() {
-    modprobe ifb || die "Failed to load the ifb module."
+    $MODPROBE_PATH ifb || die "Failed to load the ifb module."
 }
 
 # Function to create virtual interfaces if they doesn't exist
 create_virtual_interface() {
     local interface="$1"
-    ip link add "$interface" type ifb || die "Failed to create $interface."
+    $IP_PATH link add "$interface" type ifb || die "Failed to create $interface."
 }
 
 # Function to bring up the interfaces
 bring_up_interface() {
     local interface="$1"
-    ip link set dev "$interface" up || die "Failed to bring up $interface."
+    $IP_PATH link set dev "$interface" up || die "Failed to bring up $interface."
 }
 
 # Function to delete existing qdisc if it exists
@@ -221,9 +180,9 @@ delete_qdisc_if_exists() {
     local interface="$1"
     local qdisc_type="$2"
     local handle="$3"
-    if tc qdisc show dev "$interface" | grep -qw "$handle"; then
-        tc qdisc del dev "$interface" $qdisc_type 2>/dev/null || {
-            echo -e "\e[31mFailed to remove existing qdisc on $interface.\e[0m" >&2
+    if $TC_PATH qdisc show dev "$interface" | grep -qw "$handle"; then
+        $TC_PATH qdisc del dev "$interface" "$qdisc_type" 2>/dev/null || {
+            echo -e "Failed to remove existing qdisc on $interface." >&2
             rollback_everything
             exit 1
         }
@@ -233,15 +192,15 @@ delete_qdisc_if_exists() {
 # Function to rollback network perturbations changes
 rollback_everything() {
     if [ "$rollback_required" -eq 1 ] && [ "$rollback_done" -eq 0 ]; then
-        echo "Rolling back network perturbations changes..."        
-        tc qdisc del dev "$selected_interface" ingress 2>/dev/null
-        tc qdisc del dev "$selected_interface" root 2>/dev/null
-        tc qdisc del dev "$ifb0_interface" root 2>/dev/null
-        tc qdisc del dev "$ifb1_interface" root 2>/dev/null
+        echo -n "Rolling back network perturbations changes. "        
+        $TC_PATH qdisc del dev "$selected_interface" ingress 2>/dev/null
+        $TC_PATH qdisc del dev "$selected_interface" root 2>/dev/null
+        $TC_PATH qdisc del dev "$ifb0_interface" root 2>/dev/null
+        $TC_PATH qdisc del dev "$ifb1_interface" root 2>/dev/null
 
         # Set down the virtual interfaces
-        ip link delete dev "$ifb0_interface" 2>/dev/null
-        ip link delete dev "$ifb1_interface" 2>/dev/null
+        $IP_PATH link delete dev "$ifb0_interface" 2>/dev/null
+        $IP_PATH link delete dev "$ifb1_interface" 2>/dev/null
         rollback_done=1
     fi
 }
@@ -263,9 +222,9 @@ usage() {
     echo "  -h, --help                                              Display this help message."
     echo "  -r, --rollback                                          Rollback any networking conditions changes and redirections."
     echo
-    echo "  -i, --interface <interface>                             Network interface (e.g., eth0)."
-    echo "  -s, --src_ip <source_ip>                                Source IP/Network. (default: IP of selected interface)"    
-    echo "  -d, --dst_ip <destination_ip[,destination_ip2,...]>     Destination IP(s)/Network(s)."
+    echo "  -i, --interface <interface>                             Desired Network interface (e.g., eth0)."
+    echo "  -s, --src_ip <source_ip>                                Desired Source IP/Network. (default: IP of selected interface)"    
+    echo "  -d, --dst_ip <destination_ip[,destination_ip2,...]>     Desired Destination IP(s)/Network(s)."
     echo "  -w, --direction <direction>                             Desired direction of the networking conditions (ingress, egress, or both) (default: both)"
     echo  
     echo "  -l, --latency <latency>                                 Desired latency in milliseconds (e.g., 30 for 30ms)."
@@ -288,16 +247,16 @@ validate_arguments() {
 
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
+            --debug)
+                # Handle the --debug option (no argument) and exit.            
+                DEBUG=true
+                shift
+                ;;  
             -h|--help)
                 # Handle the -h or --help option (no argument) and exit.
                 usage
                 exit 0
-                ;;
-            --debug)
-                # Handle the -h or --help option (no argument) and exit.
-                debug_flag=$2
-                shift 2
-                ;;                
+                ;;           
             -r|--rollback)
                 # Handle the -r or --rollback option (no argument).
                 rollback_required=1
@@ -385,31 +344,41 @@ parse_arguments(){
 
     # Set $src_ip if not provided
     if [ -z "$src_ip" ];then
-        src_ip=$(ip -o -4 address show dev "$selected_interface" | awk '{print $4}' | cut -d'/' -f1)
+        src_ip=$($IP_PATH -o -4 address show dev "$selected_interface" | awk '{print $4}' | cut -d'/' -f1)
     fi
 
     # Validate that interface, destination IP, source IP, and direction are provided
-    if [ -z "$selected_interface" ] || [ -z "$src_ip" ] || [ -z "$dst_ip" ] || [ -z "$direction" ]; then
-        usage
+    if [ -z "$selected_interface" ] || [ -z "$src_ip" ] || [ "${#dst_ip[@]}" -eq 0 ] || [ -z "$direction" ]; then
         die "Interface and destination IP/network options are mandatory. Use --help for usage information."
     fi
 
     # Check if at least one of the other parameters is defined
     if [ -z "$latency" ] && [ -z "$jitter" ] && [ -z "$duplicate" ]  && [ -z "$corrupt" ]&& [ -z "$reorder" ] && [ -z "$packet_loss" ]; then
-        usage
         die "At least one of the parameters (latency, jitter, duplicate, corrupt, reorder, packet_loss) must be provided. Use --help for usage information."
     fi
 
     # Validate the selected interface
-    interfaces=$(ip -o link show | awk -F ': ' '{print $2}' | grep -v "lo")
+    interfaces=$($IP_PATH -o link show | awk -F ': ' '{print $2}' | grep -v "lo")
     if ! echo "$interfaces" | grep -wq "$selected_interface"; then
         die "Invalid interface selected. Please choose a valid network interface."
     fi 
 
     if [ "$latency_provided" -eq 0 ] && [ "$jitter_provided" -eq 1 ]; then
-        usage
         die "Jitter can only be used with latency. Use --help for usage information."
     fi
+
+    # Validate src_ip, dist_ip, latency, jitter, duplicate, corrupt, reorder, packet_loss.
+    [ -n "$src_ip" ] && validate_ip_format "$src_ip" "src_ip"
+    for dip in "${dst_ip[@]}"; do
+        [ -n "$dip" ] && validate_ip_format "$dip" "dst_ip"
+    done
+    [ -n "$latency" ] && latency=$(validate_numeric_format "$latency" "latency")
+    [ -n "$jitter" ] && jitter=$(validate_numeric_format "$jitter" "jitter")
+    [ -n "$packet_loss" ] && packet_loss=$(validate_numeric_format "$packet_loss" "packet_loss")    
+    [ -n "$duplicate" ] && duplicate=$(validate_numeric_format "$duplicate" "duplicate")
+    [ -n "$corrupt" ] && corrupt=$(validate_numeric_format "$corrupt" "corrupt")
+    [ -n "$reorder" ] && reorder=$(validate_numeric_format "$reorder" "reorder")    
+
 }
 
 # Function to ping the destination and display the result (skipped for networks)
@@ -435,7 +404,7 @@ ping_destination() {
     # Run the ping command in a subshell with its own trap
     (
         trap 'exit 130' SIGINT
-        ping -c "$num_pings" "$host"
+        $PING_PATH -c "$num_pings" "$host"
     )
     
     # Check if ping was interrupted by SIGINT and if so, handle it
@@ -484,7 +453,7 @@ display_apply_params() {
 # Function to display results
 display_after_message() {
     echo "Network perturbations applied with the following parameters:" 
-    [ -n "$selected_interface" ] && echo "  - Interface: $interface"   
+    [ -n "$selected_interface" ] && echo "  - Interface: $selected_interface"   
     [ -n "$src_ip" ] && echo "  - Source IP/Network: $src_ip"   
     for dip in "${dst_ip[@]}"; do
         [ -n "$dip" ] && echo "  - Destination IP/Network: $dip"       
@@ -504,14 +473,19 @@ display_after_message() {
 
 # Function to validate numeric values
 validate_numeric_format() {
-    local value="$1"
+    local original_value="$1"
     local name="$2"
-    
-    if ! [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || [ $(bc <<< "$value <= 0") -eq 1 ] || [ $(bc <<< "$value > 9999") -eq 1 ]; then
-        usage
-        echo $value
-        die "Invalid $name format. Please use a positive numeric value (e.g., 1 for 1% and 0.9 for 0.9%) for $name."
+
+    # Remove all characters that are not digits or decimal points
+    local value=${original_value//[^0-9.]/}
+
+    if ! [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        die "Invalid $name format. Please use a positive numeric value (e.g., 1 for 1ms or 0.9 for 0.9%) for $name."
+    elif (( $(bc <<< "$value <= 0") )); then
+        die "Invalid $name format. Please provide a positive numeric value."
     fi
+
+    echo $value
 }
 
 
@@ -520,15 +494,8 @@ validate_ip_format() {
     local value="$1"
     local name="$2"
 
-    # Regular expression to match an IPv4 address or a CIDR notation IPv4 network
-    local ipv4_regex="^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2}|)$"
-
-    # Regular expression to match an IPv6 address or a CIDR notation IPv6 network
-    local ipv6_regex="^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}(/[0-9]{1,3}|)$"
-
-    if ! [[ "$value" =~ $ipv4_regex ]] && ! [[ "$value" =~ $ipv6_regex ]]; then
-        usage
-        die "Invalid $name format. Please use a valid IPv4 address, IPv6 address, CIDR notation IPv4 network, or CIDR notation IPv6 network for $name."
+    if ! [[ "$value" =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)((/([0-2]?[0-9]|3[0-2]))?)$ ]]; then
+        die "Invalid $name format. Please use a valid IPv4 address or CIDR notation IPv4 network for $name."
     fi
 }
 
@@ -537,7 +504,7 @@ configure_ingress_traffic_controls() {
     local selected_interface="$1"
     local ifb1_interface="$2"
     local src_ip="$3"
-    local dst_ips=("${!4}")  # Receive dst_ips as an array
+    local dst_ip=("${!4}")  # Receive dst_ip as an array
     local latency="$5"
     local jitter="$6"
     local packet_loss="$7"
@@ -545,33 +512,20 @@ configure_ingress_traffic_controls() {
     local corrupt="$9"
     local reorder="${10}"
 
-    # Check if direction is "both" and calculate half-latency and jitter
+    # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
-        if [ ! -z "$latency" ]; then
+        if [ -n "$latency" ]; then
             latency=$(awk "BEGIN {print $latency / 2}")
-        fi
-        
-        if [ ! -z "$jitter" ]; then
+        fi       
+        if [ -n "$jitter" ]; then
             jitter=$(awk "BEGIN {print $jitter / 2}")
         fi
     fi
     
     # Redirect ingress traffic to ifb0
     delete_qdisc_if_exists "$selected_interface" "ingress" "ffff: ingress"
-    tc qdisc add dev "$selected_interface" handle ffff: ingress || die "Failed to set up ingress qdisc."
-    tc filter add dev "$selected_interface" parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$ifb0_interface" || die "Failed to redirect incoming traffic to $ifb0_interface."
-
-    # Validate src_ip, dist_ip, latency, jitter, duplicate, corrupt, reorder, packet_loss.
-    [ -n "$src_ip" ] && validate_ip_format "$src_ip" "src_ip"
-    for dip in "${dst_ip[@]}"; do
-        [ -n "$dip" ] && validate_ip_format "$dip" "dst_ip"
-    done
-    [ -n "$latency" ] && validate_numeric_format "$latency" "latency"
-    [ -n "$jitter" ] && validate_numeric_format "$jitter" "jitter"
-    [ -n "$packet_loss" ] && validate_numeric_format "$packet_loss" "packet_loss"      
-    [ -n "$duplicate" ] && validate_numeric_format "$duplicate" "duplicate"
-    [ -n "$corrupt" ] && validate_numeric_format "$corrupt" "corrupt"
-    [ -n "$reorder" ] && validate_numeric_format "$reorder" "reorder"
+    $TC_PATH qdisc add dev "$selected_interface" handle ffff: ingress || die "Failed to set up ingress qdisc for $selected_interface."
+    $TC_PATH filter add dev "$selected_interface" parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$ifb0_interface" || die "Failed to redirect incoming traffic to $ifb0_interface."
 
     # Modify the netem command based on the new options
     local netem_params=""
@@ -584,11 +538,11 @@ configure_ingress_traffic_controls() {
     
     # Apply delay to ingress (incoming) traffic on ifb0 for specific IP addresses (swtiching the order of $dist_ip and $src_ip as this is ingress)
     delete_qdisc_if_exists "$ifb0_interface" "root" "1: prio"
-    tc qdisc add dev "$ifb0_interface" root handle 1: prio || die "Failed to add ingress qdisc."    
+    $TC_PATH qdisc add dev "$ifb0_interface" root handle 1: prio || die "Failed to add ingress qdisc for $selected_interface."    
     for dip in "${dst_ip[@]}"; do
-        tc filter add dev "$ifb0_interface" parent 1: protocol ip prio 1 u32 match ip src "$dip" match ip dst "$src_ip" flowid 1:1 || die "Failed to add egress filter on $ifb1_interface for $sip to $dip."
+        $TC_PATH filter add dev "$ifb0_interface" parent 1: protocol ip prio 1 u32 match ip src "$dip" match ip dst "$src_ip" flowid 1:1 || die "Failed to add egress filter on $ifb0_interface for $dip to $src_ip."
     done
-    tc qdisc add dev "$ifb0_interface" parent 1:1 handle 2: netem $netem_params || die "Failed to add ingress delay and other parameters."    
+    $TC_PATH qdisc add dev "$ifb0_interface" parent 1:1 handle 2: netem $netem_params || die "Failed to add ingress network perturbations."    
 }
 
 # Function for configuring egress traffic controls
@@ -596,7 +550,7 @@ configure_egress_traffic_controls() {
     local selected_interface="$1"
     local ifb1_interface="$2"
     local src_ip="$3"
-    local dst_ips=("${!4}")  # Receive dst_ips as an array
+    local dst_ip=("${!4}")  # Receive dst_ip as an array
     local latency="$5"
     local latency="$5"
     local jitter="$6"
@@ -605,33 +559,20 @@ configure_egress_traffic_controls() {
     local corrupt="$9"
     local reorder="${10}"
 
-    # Check if direction is "both" and calculate half-latency and jitter
+    # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
-        if [ ! -z "$latency" ]; then
+        if [ -n "$latency" ]; then
             latency=$(awk "BEGIN {print $latency / 2}")
-        fi
-        
-        if [ ! -z "$jitter" ]; then
+        fi        
+        if [ -n "$jitter" ]; then
             jitter=$(awk "BEGIN {print $jitter / 2}")
         fi
     fi
 
     # Redirect egress traffic to ifb1
     delete_qdisc_if_exists "$selected_interface" "root" "1: prio"
-    tc qdisc add dev "$selected_interface" root handle 1: prio || die "Failed to add egress qdisc."
-    tc filter add dev "$selected_interface" parent 1: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$ifb1_interface" || die "Failed to redirect outgoing traffic to $ifb1_interface."
-
-    # Validate src_ip, dist_ip, latency, jitter, duplicate, corrupt, reorder, packet_loss.
-    [ -n "$src_ip" ] && validate_ip_format "$src_ip" "src_ip"
-    for dip in "${dst_ip[@]}"; do
-        [ -n "$dip" ] && validate_ip_format "$dip" "dst_ip"
-    done
-    [ -n "$latency" ] && validate_numeric_format "$latency" "latency"
-    [ -n "$jitter" ] && validate_numeric_format "$jitter" "jitter"
-    [ -n "$packet_loss" ] && validate_numeric_format "$packet_loss" "packet_loss"    
-    [ -n "$duplicate" ] && validate_numeric_format "$duplicate" "duplicate"
-    [ -n "$corrupt" ] && validate_numeric_format "$corrupt" "corrupt"
-    [ -n "$reorder" ] && validate_numeric_format "$reorder" "reorder"
+    $TC_PATH qdisc add dev "$selected_interface" root handle 1: prio || die "Failed to add egress qdisc for $selected_interface."
+    $TC_PATH filter add dev "$selected_interface" parent 1: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$ifb1_interface" || die "Failed to redirect outgoing traffic to $ifb1_interface."
 
     # Modify the netem command based on the new options    
     local netem_params=""
@@ -644,14 +585,15 @@ configure_egress_traffic_controls() {
 
     # Apply delay to egress (outgoing) traffic on ifb1 for specific IP addresses
     delete_qdisc_if_exists "$ifb1_interface" "root" "1: prio"
-    tc qdisc add dev "$ifb1_interface" root handle 1: prio || die "Failed to add egress qdisc on $ifb1_interface."
+    $TC_PATH qdisc add dev "$ifb1_interface" root handle 1: prio || die "Failed to add egress qdisc on $ifb1_interface."
     for dip in "${dst_ip[@]}"; do
-        tc filter add dev "$ifb1_interface" parent 1: protocol ip prio 1 u32 match ip src "$src_ip" match ip dst "$dip" flowid 1:1 || die "Failed to add egress filter on $ifb1_interface for $sip to $dip."
+        $TC_PATH filter add dev "$ifb1_interface" parent 1: protocol ip prio 1 u32 match ip src "$src_ip" match ip dst "$dip" flowid 1:1 || die "Failed to add egress filter on $ifb1_interface for $src_ip to $dip."
     done
-    tc qdisc add dev "$ifb1_interface" parent 1:1 handle 2: netem $netem_params || die "Failed to add egress delay and other parameters."
+    $TC_PATH qdisc add dev "$ifb1_interface" parent 1:1 handle 2: netem $netem_params || die "Failed to add egress network perturbations."
 }
 
 main() {
+    find_command_paths
     validate_arguments "$@"
     parse_arguments
     check_root
@@ -668,7 +610,6 @@ main() {
         create_virtual_interface "$ifb1_interface"
         bring_up_interface "$ifb1_interface"        
         configure_egress_traffic_controls "$selected_interface" "$ifb1_interface" "$src_ip" dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
-
     fi
     pinging "after" "${dst_ip[@]}"
 }
