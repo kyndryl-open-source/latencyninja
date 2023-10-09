@@ -1,9 +1,23 @@
+CHANGELOG 1.3
+- Fixed display_after_message() to show $selected_interface
+- Fixed random bash best practices based on ShellCheck
+- Did some README.md fixes
+- Simplified the die() function
+- Removed useless calls for usage() all over the script
+- Added absolute paths for commands such as ip, tc, ping, modprobe etc.
+- Added kmod as a dependency
+- Added version info in die()
+- Changed the location of cleanup for numeric values to the parse_arguments()
+- Fixed the validation for validate_numeric_format()
+- Fixed the validation for validate_ip_format()regex for the IPv4 validation / Removed IPv6 validation for now
+- Added rollback_everything if rollback_required=1 during die()
+
 CHANGELOG 1.2
 - Added variable versioning
 - Added jitter for both
-- Fixed splitting latency and jitter to suppoer factorials so / 2 = 0.*
+- Fixed splitting latency and jitter to support factorials so / 2 = 0.*
 - Changed default direction to 'both' instead of 'egress'
-- Enabled multiple --dst_ip using a -d 192.168.1.100,192.168.1.103, 192.168.101.0/24 format
+- Enabled multiple --dst_ip using a -d 192.168.1.100,192.168.1.103,she192.168.101.0/24 format
 - Enhanced usage()
 - Other general enhancements
 
