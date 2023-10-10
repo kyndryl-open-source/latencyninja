@@ -1,0 +1,10 @@
+./latencyninja.sh --interface ens192 \
+                                    --dst_ip 192.168.100.104 \
+                                    --latency 400 \
+                                    --jitter 1 \
+                                    --corrupt 0.2 \
+                                    --duplicate 0.1 \
+                                    --reorder 0.1 \
+                                    --test_method http \
+                                    --test_count 3
+
