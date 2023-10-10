@@ -44,11 +44,11 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
     git clone https://github.com/haythamelkhoja/latencyninja
     cd latencyninja
     chmod +x ./latencyninja.sh    
-    ./latencyninja.sh -h
+    ./latencyninja.sh --help
 
  ## Usage
         
-    Usage: $0 -i <interface> -d <destination> [OPTIONS]
+    Usage: -i <interface> -d <destination> [OPTIONS]
     
     Options:
       -h, --help                              Display this help message.
@@ -72,10 +72,14 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
       -k, --reorder <reorder>                 Desired packet reordering percentage (e.g., 2 for 2% or 0.9 for 0.9%).
     
 ## Example
-To simulate 100ms latency, 10ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
+To simulate 100ms latency, 1.3ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
-    ./latencyninja.sh -i eth0 -d 192.168.1.10 -l 100 -j 1.3 -x 5
-    
+    ./latencyninja.sh \
+            --interface eth0 \
+            --destination 192.168.1.10 \
+            --latency 100 \
+            --jitter 1.3 \
+            --packet-loss 5   
 
 To roll back previously applied network perturbations, run:
 

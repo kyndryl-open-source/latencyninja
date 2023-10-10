@@ -1,3 +1,19 @@
+CHANGELOG 1.4
+- Clearified some documentation in usage() and in the README.
+- Changed packet-loss to packet_loss
+- Renamed validate_numeric_format() to validate_numeric
+- Renamed validate_ip_format() to validate_ip()
+- Created validate_test_method() to check if the test is icmp or http
+- Refactored the ping_destination() and extracted is_single_host() to it can be tested for ping/icmp and curl/http
+- Replaced all pinging() and ping* related functions with test_destination() that allow for both icmp/ping and curl/http
+- Added curl as a dependency for http testing
+- Changed $selected_interface to $interface
+- Reformated the ping output and made a new way of outputing icmp/ping and curl/http tests
+- Replaced -p with -c (test_counts) and -t (test_methods)
+- Enhanced create_virtual_interface()
+- Enhanced rollback_everything()
+- Fixed all instances of delete_qdisc_if_exists() which had wrong handles causing disconnections
+
 CHANGELOG 1.3
 - Fixed display_after_message() to show $selected_interface
 - Fixed random bash best practices based on ShellCheck
