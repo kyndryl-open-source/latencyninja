@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Latency Ninja
+# Latency Ninja Query
 #
 # Latency Ninja is a wrapper tool for tc/netem to simulate network perturbations by applying latency, jitter, packet loss, and more.
 #
@@ -20,14 +20,16 @@
 
 # Define current version
 app_name="Latency Ninja"
-current_version="1.4"
+current_version="1.5"
 
 # Define global variables
 ifb0_interface="ifb0"
 ifb1_interface="ifb1"
-interface=""
-src_ip=""
-dst_ip=""
+eth_interface=""
+local_ip=""
+src_ip=() # To store combined IP:port and IP entries
+dst_ip=() # To store combined IP:port and IP entries
+dst_prt=""
 latency=""
 jitter=""
 packet_loss=""
@@ -40,8 +42,9 @@ jitter_provided=0
 latency_provided=0
 rollback_required=0
 rollback_done=0
-test_method="icmp" # Test icmp/ping selected by default
-test_count=5
+ips_swapped=0
+# test_method="icmp" # Test icmp/ping selected by default
+# test_count=5
 debug=false
 
 # Function to handle failures with debug options
@@ -61,12 +64,26 @@ die() {
         printf "Error: %s \n" "$message"
     fi
 
-    if [[ -n "$rollback_required" ]]; then
+    if [[ "$rollback_required" == 1 ]]; then
         rollback_everything
         echo "Try again."
     fi
 
     exit $exit_code
+}
+
+debug_command() {
+    local command="$@"
+    echo "Running: $command"
+    eval "$command"
+    local status=$?
+    echo "Command exited with: $status"
+
+    # Checking if the command was successful
+    if [ $status -ne 0 ]; then
+        echo "Error: Failed to execute $command"
+        exit 1 # or any action you'd like to perform on failure
+    fi
 }
 
 # Function to check full paths of commands
@@ -87,78 +104,49 @@ check_root() {
     fi
 }
 
-# Function to check for necessary Debian/Ubuntu packages
-check_debian_packages() {
-    local required_packages=("curl" "kmod" "iproute2")
-    local cmd=("/usr/bin/dpkg-query" "-W" "-f=${Status}")
-    check_missing_packages cmd "install ok installed" "${required_packages[@]}"
-}
-
-# Function to check for necessary CentOS/Fedora/RHEL packages
-check_redhat_packages() {
-    local required_packages=("curl" "kmod" "iproute" "kernel-modules-extra" "iproute-tc")
-    local cmd=("/usr/bin/rpm" "-q")
-    check_missing_packages cmd "" "${required_packages[@]}"
-}
-
-# Function to check for missing packages
+#
 check_missing_packages() {
-    local -n check_command_array=$1
-    local success_string="$2"
-    shift 2
+    local os_type="$1"
+    shift
     local packages=("$@")
-    local missing_packages=()
 
     for package in "${packages[@]}"; do
-        if [ -z "$success_string" ]; then
-            # Just look for the package name if success_string is empty
-            if ! "${check_command_array[@]}" "$package" >/dev/null 2>&1; then
-                missing_packages+=("$package")
-            fi
-        else
-            if ! "${check_command_array[@]}" "$package" 2>/dev/null | grep -q "$success_string"; then
-                missing_packages+=("$package")
-            fi
-        fi
-    done
-
-    if [ ${#missing_packages[@]} -gt 0 ]; then
-        case $OS in
+        case $os_type in
             debian|ubuntu)
-                die "The following packages are missing: ${missing_packages[*]}. Please install them using 'sudo apt install ${missing_packages[*]}' and retry."
+                if ! dpkg -l | grep -q "^ii\s\+$package\s"; then
+                    echo "Missing package: $package"
+                    echo "Install using 'sudo apt install $package'"
+                fi
                 ;;
+
             centos|fedora|rhel)
-                die "The following packages are missing: ${missing_packages[*]}. Please install them using 'sudo dnf install ${missing_packages[*]}' and retry."
-                ;;
-            *)
-                die "The following packages are missing: ${missing_packages[*]}. Please install and retry."
+                if ! rpm -q "$package" &>/dev/null; then
+                    echo "Missing package: $package"
+                    echo "Install using 'sudo dnf install $package'"
+                fi
                 ;;
         esac
-    fi
+    done
 }
 
-# Function to check for packages
-detect_os_check_packages() {
-    # Detect the OS
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$ID
-    else
-        die "Cannot identify OS type."
-    fi
-    
-    case $OS in
+# Detect OS type
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case $ID in
         debian|ubuntu)
-            check_debian_packages
+            check_missing_packages "$ID" "curl" "kmod" "iproute2" "bc"
             ;;
+
         centos|fedora|rhel)
-            check_redhat_packages
+            check_missing_packages "$ID" "curl" "kmod" "iproute" "kernel-modules-extra" "iproute-tc"
             ;;
         *)
-            die "Unsupported OS type. Run this script on CentOS/Fedora/RHEL and Debian/Ubuntu systems."
+            echo "Unsupported OS."
             ;;
     esac
-}
+else
+    echo "Cannot identify OS type."
+fi
 
 # Function to load the ifb module
 load_ifb_module() {
@@ -170,7 +158,6 @@ create_virtual_interface() {
 
     # Check if the interface already exists
     if $IP_PATH link show "$interface" &>/dev/null; then
-        echo "$interface exists. Resetting..."
         $IP_PATH link set "$interface" down
         $IP_PATH link set "$interface" up
     else
@@ -181,6 +168,7 @@ create_virtual_interface() {
 # Function to bring up the interfaces
 bring_up_interface() {
     local interface="$1"
+
     $IP_PATH link set dev "$interface" up || die "Failed to bring up $interface."
 }
 
@@ -189,6 +177,7 @@ delete_qdisc_if_exists() {
     local interface="$1"
     local qdisc_type="$2"
     local handle="$3"
+
     if $TC_PATH qdisc show dev "$interface" | grep -qw "$handle"; then
         $TC_PATH qdisc del dev "$interface" "$qdisc_type" 2>/dev/null || {
             echo -e "Failed to remove existing qdisc on $interface." >&2
@@ -202,15 +191,15 @@ delete_qdisc_if_exists() {
 rollback_everything() {
     if [ "$rollback_required" -eq 1 ] && [ "$rollback_done" -eq 0 ]; then
         echo -n "Rolling back network perturbations changes. "        
-        # Remove TC Filters
-        $TC_PATH filter del dev $interface parent 1: 2>/dev/null
-        $TC_PATH filter del dev $interface parent ffff: 2>/dev/null
-        # Flush Qdiscs
+        # Remove tc Filters
+        $TC_PATH filter del dev "$eth_interface" parent 1: 2>/dev/null
+        $TC_PATH filter del dev "$eth_interface" parent ffff: 2>/dev/null
+        # Flush tc qdiscs
         $TC_PATH qdisc del dev "$ifb0_interface" root 2>/dev/null
         $TC_PATH qdisc del dev "$ifb1_interface" root 2>/dev/null        
-        $TC_PATH qdisc del dev "$interface" ingress 2>/dev/null
-        $TC_PATH qdisc del dev "$interface" root 2>/dev/null
-        # # Set down the virtual interfaces
+        $TC_PATH qdisc del dev "$eth_interface" ingress 2>/dev/null
+        $TC_PATH qdisc del dev "$eth_interface" root 2>/dev/null
+        # Remove ifb virtual interfaces
         $IP_PATH link delete dev "$ifb0_interface" 2>/dev/null        
         $IP_PATH link delete dev "$ifb1_interface" 2>/dev/null
         rollback_done=1
@@ -226,30 +215,37 @@ usage() {
     echo "in the hope that it will be useful, but WITHOUT ANY WARRANTY."
     echo 
     echo "Usage: $0 --interface <interface> "
-    echo "             --dst_ip <destination_ip/destination_network> "
+    echo "             --dst_ip <destination_ip/destination_network:port> "
     echo "             [--src_ip <source_ip/destination_network>] "    
     echo "             [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] "
     echo "             [--corrupt <corrupt>] [--reorder <reorder>]"
-    echo "             [--test_method <test_method>] [--test_count <test_count>]"
+    # echo "             [--test_method <test_method>] [--test_count <test_count>]"
     echo
     echo "Options:"
-    echo "  -h, --help                                              Display this help message."
-    echo "  -r, --rollback                                          Rollback any networking conditions changes and redirections."
+    echo "  -h, --help                                             Display this help message."
+    echo "  -r, --rollback                                         Rollback any networking conditions changes and redirections. Requires -i"
+    # echo "  -q, --query                                            Query current rules. Requires -i"
     echo
-    echo "  -i, --interface <interface>                             Desired Network interface (e.g., eth0)."
-    echo "  -s, --src_ip <source_ip>                                Desired Source IP/Network. (default: IP of selected interface)"    
-    echo "  -d, --dst_ip <destination_ip[,destination_ip2,...]>     Desired Destination IP(s)/Network(s)."
+    echo "  -i, --interface <interface>                            Desired network interface (e.g., eth0)."
+    echo "  -s, --src_ip <ip,ip2,...>                              Desired source IP/Networks. (default: IP of selected interface)"    
+    echo "  -d, --dst_ip <ip:[port1~]...,ip2:[port1~port2~.],...>  Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by ~."
+    echo "                                                         Examples:"
+    echo "                                                         - Single IP without port: '192.168.1.1'"
+    echo "                                                         - Single IP with one port: '192.168.1.1:80'"
+    echo "                                                         - Single IP with multiple ports: '192.168.1.1:80~443'"
+    echo "                                                         - Multiple IPs with and without ports: '192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080'"
+    echo "                                                         - Multiple IPs and Subnets with and without ports: '192.168.1.1,192.168.2./24:80~443,192.168.3.0/24'"    
+    echo
     echo "  -w, --direction <ingress/egress/both>                   Desired direction of the networking conditions (ingress, egress, or both). (default: both)"
     echo  
     echo "  -l, --latency <latency>                                 Desired latency in milliseconds (e.g., 30 for 30ms)."
     echo "  -j, --jitter <jitter>                                   Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only."
-    echo "  -x, --packet_loss <packet_loss>                         Desired packet loss percentage ((e.g., 2 for 2% or 0.9 for 0.9%).."    
+    echo "  -x, --packet_loss <packet_loss>                         Desired packet loss percentage (e.g., 2 for 2% or 0.9 for 0.9%)."    
     echo "  -y, --duplicate <duplicate>                             Desired duplicate packet percentage (e.g., 2 for 2% or 0.9 for 0.9%).."
     echo "  -z, --corrupt <corrupt>                                 Desired corrupted packet percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
     echo "  -k, --reorder <reorder>                                 Desired packet reordering percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
-    echo
-    echo "  -t, --test_method <icmp/http>                           Desired method of testing to perform (icmp or http). (default: icmp)"
-    echo "  -c, --test_count <test_count>                           Desired number of test to perform (default: 5)."  
+    # echo "  -t, --test_method <icmp/http>                           Desired method of testing to perform (icmp or http). (default: icmp)"
+    # echo "  -c, --test_count <test_count>                           Desired number of test to perform (default: 5)."  
     echo
 }
 
@@ -274,73 +270,97 @@ validate_arguments() {
                 exit 0
                 ;;           
             -r|--rollback)
-                # Handle the -r or --rollback option (no argument).
+                # Handle the -r or --rollback option.
                 rollback_required=1
                 shift 1  
                 ;;        
             -i|--interface)
-                # Handle the -i or --interface option with an argument.
-                interface="$2"
+                # Handle the -i or --interface arguments.
+                eth_interface="$2"
                 interface_provided=1
                 shift 2
                 ;;
             -s|--src_ip)
-                # Handle the -s or --src_ip option with an argument.
-                src_ip="$2"
+                # Handle the -s or --src_ip arguments.
+                entry="$2"
+                # If ports are found (via the presence of the colon)
+                if [[ "$entry" == *":"* ]]; then
+                    ip=$(echo "$entry" | cut -d':' -f1)
+                    ports=$(echo "$entry" | cut -d':' -f2 | tr '~' ' ')
+                    for port in $ports; do  # Looping over space-separated ports
+                        src_ip=("$ip:$port")  # Overwriting the src_ip each time to only store the last port (if multiple ports are provided)
+                    done
+                else
+                    # No colon found, so the entire entry is just the IP
+                    src_ip=("$entry:0")
+                fi
                 shift 2
                 ;;
             -d|--dst_ip)
-                # Handle the -d or --dst_ip option with an argument.
-                IFS=',' read -ra dst_ip <<< "$2"
+                # Handle the -d or --dst_ip arguments.
+                IFS=',' read -ra dst_entries <<< "$2"
+                for entry in "${dst_entries[@]}"; do
+                    # If ports are found (via the presence of the colon)
+                    if [[ "$entry" == *":"* ]]; then
+                        ip=$(echo "$entry" | cut -d':' -f1)
+                        ports=$(echo "$entry" | cut -d':' -f2 | tr '~' ' ')
+                        for port in $ports; do  # Looping over space-separated ports
+                            dst_ip+=("$ip:$port")
+                        done
+                    else
+                        # No colon found, so the entire entry is just the IP
+                        dst_ip+=("$entry:0")
+                    fi
+                done
                 shift 2
-                ;;            
+                ;;
             -w|--direction)
-                # Handle the -w or --direction option with an argument.
+                # Handle the -w or --direction arguments.
                 direction="$2"
                 shift 2
                 ;;                
             -l|--latency)
-                # Handle the -l or --latency option with an argument.
+                # Handle the -l or --latency arguments.
                 latency="$2"
                 latency_provided=1
                 shift 2
                 ;;
             -j|--jitter)
-                # Handle the -j or --jitter option with an argument.
+                # Handle the -j or --jitter arguments.
                 jitter="$2"
                 jitter_provided=1
                 shift 2
                 ;;
             -x|--packet_loss)
-                # Handle the -x or --packet_loss option with an argument.
+                # Handle the -x or --packet_loss arguments.
                 packet_loss="$2"
                 shift 2
                 ;;
             -y|--duplicate)
-                # Handle the -y or --duplicate option with an argument.
+                # Handle the -y or --duplicate arguments.
                 duplicate="$2"
                 shift 2
                 ;;
             -z|--corrupt)
-                # Handle the -z or --corrupt option with an argument.
+                # Handle the -z or --corrupt arguments.
                 corrupt="$2"
                 shift 2
                 ;;
             -k|--reorder)
-                # Handle the -k or --reorder option with an argument.
+                # Handle the -k or --reorder arguments.
                 reorder="$2"
                 shift 2
                 ;;
-            -t|--test_method)
-                # Handle the -t or --test_method option with an argument.
-                test_method="$2"
-                shift 2
-                ;;                     
-            -c|--test_count)
-                # Handle the -c or --test_count option with an argument.
-                test_count="$2"
-                shift 2
-                ;;                
+            # -t|--test_method)
+            #     # Handle the -t or --test_method arguments.
+            #     test_method="$2"
+            #     shift 2
+            #     ;;                     
+            # -c|--test_count)
+            #     # Handle the -c or --test_count arguments.
+            #     test_count="$2"
+            #     shift 2
+            #     ;;                
             *)
                 # Handle unknown or invalid options here and exit.
                 echo "Invalid option: $1"
@@ -359,18 +379,20 @@ parse_arguments(){
         else
             rollback_everything
             echo
-            echo "Rolled back network perturbations changes for interface $interface."
+            echo "Rolled back network perturbations changes for interface $eth_interface."
             exit 0
         fi
     fi
 
-    # Set $src_ip if not provided
-    if [ -z "$src_ip" ];then
-        src_ip=$($IP_PATH -o -4 address show dev "$interface" | awk '{print $4}' | cut -d'/' -f1)
+    local_ip=$($IP_PATH -o -4 address show dev "$eth_interface" | awk '{print $4}' | cut -d'/' -f1)
+
+    # Check if the array is empty
+    if [ "${#src_ip[@]}" -eq 0 ]; then
+        src_ip=("$local_ip")  # Assign as an array
     fi
 
     # Validate that interface, destination IP, source IP, and direction are provided
-    if [ -z "$interface" ] || [ -z "$src_ip" ] || [ "${#dst_ip[@]}" -eq 0 ] || [ -z "$direction" ]; then
+    if [ -z "$eth_interface" ] || [ "${#src_ip[@]}" -eq 0 ] || [ "${#dst_ip[@]}" -eq 0 ] || [ -z "$direction" ]; then
         die "Interface and destination IP/network options are mandatory. Use --help for usage information."
     fi
 
@@ -380,8 +402,8 @@ parse_arguments(){
     fi
 
     # Validate the selected interface
-    interfaces=$($IP_PATH -o link show | awk -F ': ' '{print $2}' | grep -v "lo")
-    if ! echo "$interfaces" | grep -wq "$interface"; then
+    eth_interfaces=$($IP_PATH -o link show | awk -F ': ' '{print $2}' | grep -v "lo")
+    if ! echo "$eth_interfaces" | grep -wq "$eth_interface"; then
         die "Invalid interface selected. Please choose a valid network interface."
     fi 
 
@@ -390,9 +412,11 @@ parse_arguments(){
         die "Jitter can only be used with latency. Use --help for usage information."
     fi
 
-    # Validate src_ip, dist_ip, latency, jitter, duplicate, corrupt, reorder, packet_loss, test_method, test_count...
-    [ -n "$src_ip" ] && validate_ip "$src_ip" "src_ip"
-    for dip in "${dst_ip[@]}"; do
+    # Validate src_ip, dst_ip, dst_prt, latency, jitter, duplicate, corrupt, reorder, packet_loss, test_method, test_count...
+    for sip in "${src_ip[@]}"; do    
+        [ -n "$sip" ] && validate_ip "$sip" "src_ip"
+    done
+    for dip in "${dst_ip[@]}"; do    
         [ -n "$dip" ] && validate_ip "$dip" "dst_ip"
     done
     [ -n "$latency" ] && latency=$(validate_numeric "$latency" "latency")
@@ -401,8 +425,8 @@ parse_arguments(){
     [ -n "$duplicate" ] && duplicate=$(validate_numeric "$duplicate" "duplicate")
     [ -n "$corrupt" ] && corrupt=$(validate_numeric "$corrupt" "corrupt")
     [ -n "$reorder" ] && reorder=$(validate_numeric "$reorder" "reorder")  
-    [ -n "$test_method" ] && test_method=$(validate_test_method "$test_method" "test_method")    
-    [ -n "$test_count" ] && test_count=$(validate_numeric "$test_count" "test_count")    
+    # [ -n "$test_method" ] && test_method=$(validate_test_method "$test_method" "test_method")    
+    # [ -n "$test_count" ] && test_count=$(validate_numeric "$test_count" "test_count")    
 }
 
 # Function to determine if a destination is a single host IP or a network
@@ -428,76 +452,82 @@ is_single_host() {
 }
 
 # Function to ping the destination and display the result (skipped for networks)
-test_destination() {
-    local mode="$1"
-    local host="$2"
-    local port="${3:-80}"  # Default to port 80 for HTTP if not provided
+# test_destination() {
+#     local mode="$1"
+#     local host="$2"
+#     local port="${3:-80}"  # Default to port 80 for HTTP if not provided
 
-    is_single_host "$host" || { echo "Testing is only supported for single host IP address."; return; }
+#     is_single_host "$host" || { echo "Testing is only supported for single host IP address."; return; }
 
-    case "$mode" in
-        "icmp")
-            for i in $(seq 1 $test_count); do
-                # Run the ping command for a single packet and capture its output
-                local result=$(ping -c 1 "$host" 2>&1)
-                if echo "$result" | grep -q "1 received"; then
-                    # Extract time using awk; ICMP output is typically already in ms
-                    local time=$(echo "$result" | awk -F"time=" '{print $2}' | awk '{print $1}')
-                    echo "ICMP test to $host (attempt $i of $test_count) was successful. Response time: ${time} ms."
-                else
-                    echo "ICMP test to $host (attempt $i of $test_count) failed."
-                fi
-                sleep 1  # Wait for 1 second before the next test
-            done
-            ;;
-        "http")
-            # Determine protocol based on port
-            protocol=$([[ "$port" == "443" ]] && echo "https" || echo "http")
-            for i in $(seq 1 $test_count); do
-                # Use cURL to test the connection and fetch response time in seconds
-                response_time_seconds=$($CURL_PATH -o /dev/null -s -w "%{time_total}" --head --fail --request GET "$protocol://$host:$port")
-                # Convert the response time to milliseconds
-                response_time_milliseconds=$(awk "BEGIN {print $response_time_seconds*1000}")
-                if [ $? -eq 0 ]; then
-                    echo "HTTP test to $host:$port (attempt $i of $test_count) was successful. Response time: ${response_time_milliseconds} ms."
-                else
-                    echo "HTTP test to $host:$port (attempt $i of $test_count) failed."
-                fi
-                sleep 1  # Wait for 1 second before the next test
-            done
-            ;;
-        *)
-            echo "Invalid mode specified. Use 'icmp' or 'http'."
-            ;;
-    esac
-}
+#     case "$mode" in
+#         "icmp")
+#             for i in $(seq 1 $test_count); do
+#                 # Run the ping command for a single packet and capture its output
+#                 local result=$(ping -c 1 "$host" 2>&1)
+#                 if echo "$result" | grep -q "1 received"; then
+#                     # Extract time using awk; ICMP output is typically already in ms
+#                     local time=$(echo "$result" | awk -F"time=" '{print $2}' | awk '{print $1}')
+#                     time=${time//$'\n'/}
+#                     echo  "ICMP test to $host (attempt $i of $test_count) was successful. Response time: ${time} ms."
+#                 else
+#                     echo "ICMP test to $host (attempt $i of $test_count) failed."
+#                 fi
+#                 sleep 1  # Wait for 1 second before the next test
+#             done
+#             ;;
+#         "http")
+#             # Determine protocol based on port
+#             protocol=$([[ "$port" == "443" ]] && echo "https" || echo "http")
+#             for i in $(seq 1 $test_count); do
+#                 # Use cURL to test the connection and fetch response time in seconds
+#                 response_time_seconds=$($CURL_PATH -o /dev/null -s -w "%{time_total}" --head --fail --request GET "$protocol://$host:$port")
+#                 # Convert the response time to milliseconds
+#                 response_time_milliseconds=$(awk "BEGIN {print $response_time_seconds*1000}")
+#                 if [ $? -eq 0 ]; then
+#                     echo "HTTP test to $host:$port (attempt $i of $test_count) was successful. Response time: ${response_time_milliseconds} ms."
+#                 else
+#                     echo "HTTP test to $host:$port (attempt $i of $test_count) failed."
+#                 fi
+#                 sleep 1  # Wait for 1 second before the next test
+#             done
+#             ;;
+#         *)
+#             echo "Invalid mode specified. Use 'icmp' or 'http'."
+#             ;;
+#     esac
+# }
 
 # Function to display the test process
 display_test_process() {
     local method="$1"
-
     local stage="$2" # Should be 'before' or 'after'
     local hosts=("${@:3}") # All arguments after the first two are considered as hosts
 
-    for host in "${hosts[@]}"; do
-        echo "Testing the destination using $method $stage applying network perturbations for host $host:"
-        if [ "$method" == "icmp" ]; then
-            test_destination icmp "$host"
-        elif [ "$method" == "http" ]; then
-            test_destination http "$host"
-        fi
+    for host_with_port in "${hosts[@]}"; do
+        # Extract just the hostname/IP without port for ICMP tests
+        local host=$(echo "$host_with_port" | cut -d: -f1)
+        
+        # Always test using ICMP
+        echo "Testing the destination using icmp $stage applying network perturbations for host $host:"
+        test_destination icmp "$host"
         echo
+        
+        # If http is selected and the host has port 80 or 443, also do the HTTP test
+        if [ "$method" == "http" ] && [[ "$host_with_port" =~ :80$|:443$ ]]; then
+            echo "Testing the destination using http $stage applying network perturbations for host $host_with_port:"
+            test_destination http "$host_with_port"
+            echo
+        fi
     done
 }
 
 # Function to test pre/post network perturbations
 testing() {
     local method="$1"    
-
     local stage="$2"  # "before" or "after"
     local hosts=("${@:3}") # All arguments after the first two are considered as hosts
 
-    display_test_process "$method" "$stage" "${hosts[@]}"
+    # display_test_process "$method" "$stage" "${hosts[@]}"
 
     if [ "$stage" == "before" ]; then
         display_apply_params
@@ -511,18 +541,22 @@ testing() {
 # Function to display parameters that will be applied
 display_apply_params() {
     echo "Applying network perturbations on:"
-    echo "  - Interface: $interface"
-    echo "  - Source IP/Network: $src_ip"
+    echo "  - Interface: $eth_interface"
+    for sip in "${src_ip[@]}"; do
+        [ -n "$sip" ] && echo "  - Source IP/Network: $sip"       
+    done
     echo
 }
 
 # Function to display results
 display_after_message() {
     echo "Network perturbations applied with the following parameters:" 
-    [ -n "$test_method" ] && echo "  - Test Method: $test_method"
-    [ -n "$test_count" ] && echo "  - Test Count: $test_count"    
-    [ -n "$interface" ] && echo "  - Interface: $interface"   
-    [ -n "$src_ip" ] && echo "  - Source IP/Network: $src_ip"   
+    # [ -n "$test_method" ] && echo "  - Test Method: $test_method"
+    # [ -n "$test_count" ] && echo "  - Test Count: $test_count"    
+    [ -n "$eth_interface" ] && echo "  - Interface: $eth_interface"   
+    for sip in "${src_ip[@]}"; do
+        [ -n "$sip" ] && echo "  - Source IP/Network: $sip"       
+    done        
     for dip in "${dst_ip[@]}"; do
         [ -n "$dip" ] && echo "  - Destination IP/Network: $dip"       
     done    
@@ -534,7 +568,7 @@ display_after_message() {
     [ -n "$corrupt" ] && echo "  - Corruption: $corrupt %"
     [ -n "$reorder" ] && echo "  - Reorder: $reorder %"    
     echo
-    echo "To rollback, run $0 --rollback --interface $interface"
+    echo "To rollback, run $0 --rollback --interface $eth_interface"
     echo 
 }
 
@@ -542,9 +576,7 @@ display_after_message() {
 validate_numeric() {
     local original_value="$1"
     local name="$2"
-
-    # Remove all characters that are not digits or decimal points
-    local value=${original_value//[^0-9.]/}
+    local value=${original_value//[^0-9.]/} # Remove all characters that are not digits or decimal points
 
     if ! [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
         die "Invalid $name format. Please use a positive numeric value (e.g., 1 for 1ms or 0.9 for 0.9%) for $name."
@@ -555,35 +587,72 @@ validate_numeric() {
     echo $value
 }
 
-# Function to validate IP addresses or IP networks
+# Function to validate IP addresses or IP networks with optional ports
 validate_ip() {
     local value="$1"
     local name="$2"
+    
+    # Split IP and port
+    local ip="${value%%:*}"  # everything before the first colon
+    local port="${value#*:}" # everything after the first colon
 
-    if ! [[ "$value" =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)((/([0-2]?[0-9]|3[0-2]))?)$ ]]; then
-        die "Invalid $name format. Please use a valid IPv4 address or CIDR notation IPv4 network for $name."
+    # Regex to match IP
+    local ip_pattern="^([0-9]{1,3}\.){3}[0-9]{1,3}"
+    # Regex to optionally match CIDR
+    local cidr_pattern="(/([0-2]?[0-9]|3[0-2]))?$"
+
+    # Validate the IP part
+    if ! [[ "$ip" =~ ${ip_pattern}${cidr_pattern} ]]; then
+        die "Invalid $name format for IP. Please use a valid IPv4 address or CIDR notation IPv4 network for $name and $value"
+    fi
+
+    # Validate the port if it exists (if value contains a colon)
+    if [[ "$value" == *":"* ]]; then
+        if ((port < 0 || port > 65535)); then
+            die "Invalid $name format for port. Port $port is not in the range 0-65535."
+        fi
     fi
 }
 
 # Function to validate the test method (either icmp or http)
-validate_test_method() {
-    local value="$1"
+# validate_test_method() {
+#     local value="$1"
 
-    case "$value" in
-        "icmp"|"http")
-            echo $value
-            ;;
-        *)
-            die "Invalid test method. Please specify either 'icmp' or 'http'."
-            ;;
-    esac
+#     case "$value" in
+#         "icmp"|"http")
+#             echo $value
+#             ;;
+#         *)
+#             die "Invalid test method. Please specify either 'icmp' or 'http'."
+#             ;;
+#     esac
+# }
+
+# Function to swap dst_ip and src_ip based on perspectice of rules
+swap_ips_if_match() {  
+    for index in "${!dst_ip[@]}"; do
+        # Extract just the IP part, ignoring any potential port value
+        if [[ "${dst_ip[$index]}" == *":"* ]]; then
+            IFS=':' read -r extracted_ip _ <<< "${dst_ip[$index]}"
+        else
+            extracted_ip="${dst_ip[$index]}"
+        fi
+
+        # Compare extracted IP with the local IP
+        if [ "$extracted_ip" == "$local_ip" ]; then
+            temp="${src_ip[$index]}"
+            src_ip[$index]="${dst_ip[$index]}"
+            dst_ip[$index]="$temp"
+            ips_swapped=1          
+        fi
+    done
 }
 
 # Function for configuring ingress traffic controls
 configure_ingress_traffic_controls() {
     local interface="$1"
-    local ifb1_interface="$2"
-    local src_ip="$3"
+    local ifb0_interface="$2"
+    local src_ip=("${!3}")  # Convert src_ip to an array
     local dst_ip=("${!4}")  # Receive dst_ip as an array
     local latency="$5"
     local jitter="$6"
@@ -591,6 +660,8 @@ configure_ingress_traffic_controls() {
     local duplicate="$8"
     local corrupt="$9"
     local reorder="${10}"
+
+    swap_ips_if_match # Allows to switch perspective of traffic direction
 
     # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
@@ -603,9 +674,9 @@ configure_ingress_traffic_controls() {
     fi
     
     # Redirect ingress traffic to ifb0
-    delete_qdisc_if_exists "$interface" "ingress" "ffff:"
-    $TC_PATH qdisc add dev "$interface" handle ffff: ingress || die "Failed to set up ingress qdisc for $interface."
-    $TC_PATH filter add dev "$interface" parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$ifb0_interface" || die "Failed to redirect incoming traffic to $ifb0_interface."
+    delete_qdisc_if_exists "$eth_interface" "ingress" "ffff:"
+    $TC_PATH qdisc add dev "$eth_interface" handle ffff: ingress || die "Failed to set up ingress qdisc for $eth_interface."
+    $TC_PATH filter add dev "$eth_interface" protocol ip parent ffff: u32 match u32 0 0 action mirred egress redirect dev "$ifb0_interface" || die "Failed to redirect incoming traffic to $ifb0_interface."
 
     # Modify the netem command based on the new options
     local netem_params=""
@@ -616,28 +687,49 @@ configure_ingress_traffic_controls() {
     [ -n "$corrupt" ] && netem_params="$netem_params corrupt $corrupt%"
     [ -n "$reorder" ] && netem_params="$netem_params reorder $reorder%"
     
-    # Apply delay to ingress (incoming) traffic on ifb0 for specific IP addresses (swtiching the order of $dist_ip and $src_ip as this is ingress)
-    delete_qdisc_if_exists "$ifb0_interface" "root" "prio 1:"
-    $TC_PATH qdisc add dev "$ifb0_interface" root handle 1: prio || die "Failed to add ingress qdisc for $interface."    
-    for dip in "${dst_ip[@]}"; do
-        $TC_PATH filter add dev "$ifb0_interface" parent 1: protocol ip prio 1 u32 match ip src "$dip" match ip dst "$src_ip" flowid 1:1 || die "Failed to add egress filter on $ifb0_interface for $dip to $src_ip."
+    # Apply delay to ingress (incoming) traffic on ifb0 for specific IP addresses
+    delete_qdisc_if_exists "$ifb0_interface" "root" "prio 1:0"
+    $TC_PATH qdisc add dev "$ifb0_interface" root handle 1:0 prio || die "Failed to add ingress qdisc for $eth_interface."
+    for sip in "${src_ip[@]}"; do
+        for dip in "${dst_ip[@]}"; do
+            if [ -n "$sip" ] && [ -n "$dip" ]; then      
+                stripped_sip="${sip%%:*}"  # Extract IP part before the colon
+                if [ "$ips_swapped" -eq 1 ]; then
+                    stripped_dprt="${sip##*:}"
+                else
+                    stripped_dprt="${dip##*:}"
+                fi
+                stripped_dip="${dip%%:*}"  # Extract IP part before the colon        
+                if [ "$stripped_dprt" != "0" ]; then
+                    if [ "$ips_swapped" -eq 1 ]; then
+                        $TC_PATH filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip dst "$stripped_sip" match ip dport "$stripped_dprt" 0xffff flowid 1:1 || die "Failed to add ingress filter on $ifb0_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                    else
+                        $TC_PATH filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip sport "$stripped_dprt" 0xffff match ip dst "$stripped_sip" flowid 1:1 || die "Failed to add ingress filter on $ifb0_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                    fi
+                else
+                    $TC_PATH filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip dst "$stripped_sip" flowid 1:1 || die "Failed to add ingress filter on $ifb0_interface for $sip to $dip."
+                fi
+            fi
+        done
     done
-    $TC_PATH qdisc add dev "$ifb0_interface" parent 1:1 handle 2: netem $netem_params || die "Failed to add ingress network perturbations."    
+    
+    $TC_PATH qdisc add dev "$ifb0_interface" parent 1:1 handle 10:0 netem $netem_params || die "Failed to add ingress network perturbations."    
 }
 
 # Function for configuring egress traffic controls
 configure_egress_traffic_controls() {
     local interface="$1"
     local ifb1_interface="$2"
-    local src_ip="$3"
+    local src_ip=("${!3}")  # Receive src_ip as an array
     local dst_ip=("${!4}")  # Receive dst_ip as an array
-    local latency="$5"
     local latency="$5"
     local jitter="$6"
     local packet_loss="$7"
     local duplicate="$8"
     local corrupt="$9"
     local reorder="${10}"
+
+    swap_ips_if_match # Allows to switch perspective of traffic direction
 
     # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
@@ -650,9 +742,9 @@ configure_egress_traffic_controls() {
     fi
 
     # Redirect egress traffic to ifb1
-    delete_qdisc_if_exists "$interface" "root" "prio 1:"
-    $TC_PATH qdisc add dev "$interface" root handle 1: prio || die "Failed to add egress qdisc for $interface."
-    $TC_PATH filter add dev "$interface" parent 1: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$ifb1_interface" || die "Failed to redirect outgoing traffic to $ifb1_interface."
+    delete_qdisc_if_exists "$eth_interface" "root" "prio 1:0"
+    $TC_PATH qdisc add dev "$eth_interface" root handle 1:0 prio || die "Failed to add egress qdisc for $eth_interface."
+    $TC_PATH filter add dev "$eth_interface" protocol ip parent 1:0 u32 match u32 0 0 action mirred egress redirect dev "$ifb1_interface" || die "Failed to redirect outgoing traffic to $ifb1_interface."
 
     # Modify the netem command based on the new options    
     local netem_params=""
@@ -664,12 +756,32 @@ configure_egress_traffic_controls() {
     [ -n "$reorder" ] && netem_params="$netem_params reorder $reorder%"
 
     # Apply delay to egress (outgoing) traffic on ifb1 for specific IP addresses
-    delete_qdisc_if_exists "$ifb1_interface" "root" "prio 1:"
-    $TC_PATH qdisc add dev "$ifb1_interface" root handle 1: prio || die "Failed to add egress qdisc on $ifb1_interface."
-    for dip in "${dst_ip[@]}"; do
-        $TC_PATH filter add dev "$ifb1_interface" parent 1: protocol ip prio 1 u32 match ip src "$src_ip" match ip dst "$dip" flowid 1:1 || die "Failed to add egress filter on $ifb1_interface for $src_ip to $dip."
+    delete_qdisc_if_exists "$ifb1_interface" "root" "prio 1:0"
+    $TC_PATH qdisc add dev "$ifb1_interface" root handle 1:0 prio || die "Failed to add egress qdisc on $ifb1_interface." 
+    for sip in "${src_ip[@]}"; do
+        for dip in "${dst_ip[@]}"; do
+            if [ -n "$sip" ] && [ -n "$dip" ]; then            
+                stripped_sip="${sip%%:*}"  # Extract IP part before the colon
+                if [ "$ips_swapped" -eq 1 ]; then
+                    stripped_dprt="${sip##*:}"
+                else
+                    stripped_dprt="${dip##*:}"
+                fi
+                # stripped_dprt="${dip##*:}"  # Extract port part after the colon (will be the same as IP if no colon exists)
+                stripped_dip="${dip%%:*}"  # Extract IP part before the colon        
+                if [ "$stripped_dprt" != "0" ]; then
+                    if [ "$ips_swapped" -eq 1 ]; then
+                        $TC_PATH filter add dev "$ifb1_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_sip" match ip sport "$stripped_dprt" 0xffff match ip dst "$stripped_dip" flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                    else
+                        $TC_PATH filter add dev "$ifb1_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_sip" match ip dst "$stripped_dip" match ip dport "$stripped_dprt" 0xffff flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                    fi
+                else
+                    $TC_PATH filter add dev "$ifb1_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_sip" match ip dst "$stripped_dip" flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $sip to $dip."
+                fi
+            fi
+        done
     done
-    $TC_PATH qdisc add dev "$ifb1_interface" parent 1:1 handle 2: netem $netem_params || die "Failed to add egress network perturbations."
+    $TC_PATH qdisc add dev "$ifb1_interface" parent 1:1 handle 20:0 netem $netem_params || die "Failed to add egress network perturbations."
 }
 
 main() {
@@ -677,19 +789,18 @@ main() {
     validate_arguments "$@"
     parse_arguments 
     check_root
-    detect_os_check_packages
     rollback_required=1
     load_ifb_module
     testing "$test_method" "before" "${dst_ip[@]}"
     if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb0_interface"
         bring_up_interface "$ifb0_interface"
-        configure_ingress_traffic_controls "$interface" "$ifb0_interface" "$src_ip" dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
+        configure_ingress_traffic_controls "$eth_interface" "$ifb0_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
     fi
     if [ "$direction" == "egress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb1_interface"
         bring_up_interface "$ifb1_interface"        
-        configure_egress_traffic_controls "$interface" "$ifb1_interface" "$src_ip" dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
+        configure_egress_traffic_controls "$eth_interface" "$ifb1_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
     fi
     testing "$test_method" "after" "${dst_ip[@]}"
 }

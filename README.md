@@ -49,27 +49,29 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
  ## Usage
         
     Usage: -i <interface> -d <destination> [OPTIONS]
-    
-    Options:
-      -h, --help                              Display this help message.
-      -r, --rollback                          Rollback any networking conditions changes and redirections.
-    
-    Required Parameters:    
-      -i, --interface <interface>             Network interface (e.g., eth0).
-      -d, --dst_ip <ip1[,ip2,ip3...]>         Destination IP(s) / Network(s) (e.g. 192.168.1.100,192.168.1.102,192.168.1.103).    
-    
-    Optional Parameters:
-      -s, --src_ip <source_ip>                Source IP / Network (default: IP of selected interface).
-      -w, --direction <direction>             Desired direction of the networking conditions (e.g., ingress, egress, or both) (default: both).
-      -p, --pings <num_pings>                 Desired number of pings to test (default: 5).  
-    
-    Network Conditions:    
-      -l, --latency <latency>                 Desired latency in milliseconds (e.g., 30 for 30ms).
-      -j, --jitter <jitter>                   Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only.
-      -x, --packet-loss <packet_loss>         Desired packet loss percentage (e.g., 2 for 2% or 0.9 for 0.9%).    
-      -y, --duplicate <duplicate>             Desired duplicate packet percentage (e.g., 2 for 2% or 0.9 for 0.9%).
-      -z, --corrupt <corrupt>                 Desired corrupted packet percentage (e.g., 2 for 2% or 0.9 for 0.9%).
-      -k, --reorder <reorder>                 Desired packet reordering percentage (e.g., 2 for 2% or 0.9 for 0.9%).
+        
+    Options:"
+      -h, --help                                             Display this help message."
+      -r, --rollback                                         Rollback any networking conditions changes and redirections. Requires -i"
+
+      -i, --interface <interface>                            Desired network interface (e.g., eth0)."
+      -s, --src_ip <ip,ip2,...>                              Desired source IP/Networks. (default: IP of selected interface)"    
+      -d, --dst_ip <ip:[port1~]...,ip2:[port1~port2~.],...>  Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by ~."
+                                                             Examples:"
+                                                             - Single IP without port: '192.168.1.1'"
+                                                             - Single IP with one port: '192.168.1.1:80'"
+                                                             - Single IP with multiple ports: '192.168.1.1:80~443'"
+                                                             - Multiple IPs with and without ports: '192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080'"
+                                                             - Multiple IPs and Subnets with and without ports: '192.168.1.1,192.168.2./24:80~443,192.168.3.0/24'"    
+
+      -w, --direction <ingress/egress/both>                   Desired direction of the networking conditions (ingress, egress, or both). (default: both)"
+
+      -l, --latency <latency>                                 Desired latency in milliseconds (e.g., 30 for 30ms)."
+      -j, --jitter <jitter>                                   Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only."
+      -x, --packet_loss <packet_loss>                         Desired packet loss percentage (e.g., 2 for 2% or 0.9 for 0.9%)."    
+      -y, --duplicate <duplicate>                             Desired duplicate packet percentage (e.g., 2 for 2% or 0.9 for 0.9%).."
+      -z, --corrupt <corrupt>                                 Desired corrupted packet percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
+      -k, --reorder <reorder>                                 Desired packet reordering percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
     
 ## Example
 To simulate 100ms latency, 1.3ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
