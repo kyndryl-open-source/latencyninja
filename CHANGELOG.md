@@ -1,3 +1,10 @@
+CHANGELOG 1.5
+- Added a latencyninjaquery.sh capability to show current rules (work in progress)
+- Added capabilities to add rules based on multiple destination ports
+- Added a perspective function for source_ips that flips src_ip and dst_ip (need to check if his works as Router mode or Bridge mode later)
+- Temporarly removed the pre/post rule tests/pings
+- Started capability for multiple src_ips (INCOMPLETE)
+
 CHANGELOG 1.4
 - Clearified some documentation in usage() and in the README.
 - Changed packet-loss to packet_loss
