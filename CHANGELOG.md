@@ -1,3 +1,6 @@
+CHANGELOG 1.7
+- Fixed GPL License to v2.0 all over
+
 CHANGELOG 1.6
 - Refactored the entire code base, optimized and compacted it
 - Removed test functions
