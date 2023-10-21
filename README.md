@@ -82,7 +82,6 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
       -k, --reorder <reorder>                        Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
 
 ## Examples
-To simulate 100ms latency, 1.3ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
     ./latencyninja \ 
           --interface eth0 --dst_ip 192.168.100.123 --latency 5 
