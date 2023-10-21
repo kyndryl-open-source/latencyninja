@@ -1,6 +1,8 @@
 # Latency Ninja
 
-Latency Ninja is a wrapper tool built around `tc/netem`, designed to empower you with the ability to simulate network perturbations on a specified network interface and destination IP address. It allows you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic simultaneously, circumventing the limitations of `tc/netem` that typically would apply rules on egress only.
+Latency Ninja is a user-friendly wrapper for `tc/netem`. It is designed to emulate network perturbations for interfaces and networks. It is tailored for simulating network perturbations during chaos engineering exercises, and multi-region, distributed and hybrid cloud deployment simulations. It allows you to introduce latency, jitter, corruption, duplication, reordering, and packet loss to both ingress and egress traffic simultaneously, circumventing the limitations of `tc/netem` that typically would apply rules on egress only. 
+
+This program is distributed under the GNU General Public License (GPL), it is distributed in the hope that it will be useful but provided without any warranty, implied or explicit.
 
 ## Key Features
 
@@ -26,8 +28,7 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Example](#Example)
-- [Screenshot](#Screenshot)
+- [Examples](#Examples)
 - [Warning](#warning)
 - [Troubleshooting](#troubleshooting)
 - [Roadmap](#Roadmap)
@@ -43,53 +44,67 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
     git clone https://github.com/haythamelkhoja/latencyninja
     cd latencyninja
-    chmod +x ./latencyninja.sh    
-    ./latencyninja.sh --help
+    chmod +x ./latencyninja    
+
+    ./latencyninja --help
 
  ## Usage
-        
-    Usage: -i <interface> -d <destination> [OPTIONS]
-        
-    Options:"
-      -h, --help                                             Display this help message."
-      -r, --rollback                                         Rollback any networking conditions changes and redirections. Requires -i"
+          
+      $0 --interface <interface> 
+              --dst_ip <destination_ip/destination_network:port> 
+              [--src_ip <source_ip/destination_network>] 
+              [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]
 
-      -i, --interface <interface>                            Desired network interface (e.g., eth0)."
-      -s, --src_ip <ip,ip2,...>                              Desired source IP/Networks. (default: IP of selected interface)"    
-      -d, --dst_ip <ip:[port1~]...,ip2:[port1~port2~.],...>  Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by ~."
-                                                             Examples:"
-                                                             - Single IP without port: '192.168.1.1'"
-                                                             - Single IP with one port: '192.168.1.1:80'"
-                                                             - Single IP with multiple ports: '192.168.1.1:80~443'"
-                                                             - Multiple IPs with and without ports: '192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080'"
-                                                             - Multiple IPs and Subnets with and without ports: '192.168.1.1,192.168.2./24:80~443,192.168.3.0/24'"    
+      Options:
 
-      -w, --direction <ingress/egress/both>                   Desired direction of the networking conditions (ingress, egress, or both). (default: both)"
+      -h, --help                                     Display this help message
+      -q, --query                                    Display current tc rules
+      -r, --rollback                                 Rollback any networking conditions changes and redirections. Requires --interface
 
-      -l, --latency <latency>                                 Desired latency in milliseconds (e.g., 30 for 30ms)."
-      -j, --jitter <jitter>                                   Desired jitter in milliseconds (e.g., 3 for 3ms). Use with -l|--latency only."
-      -x, --packet_loss <packet_loss>                         Desired packet loss percentage (e.g., 2 for 2% or 0.9 for 0.9%)."    
-      -y, --duplicate <duplicate>                             Desired duplicate packet percentage (e.g., 2 for 2% or 0.9 for 0.9%).."
-      -z, --corrupt <corrupt>                                 Desired corrupted packet percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
-      -k, --reorder <reorder>                                 Desired packet reordering percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
-    
-## Example
+      -i, --interface <interface>                    Desired network interface (e.g., eth0)
+      -s, --src_ip <ip,ip2,...>                      Desired source IP/Network. (default: IP of selected interface)
+      -d, --dst_ip <ip:[prt1~],ip2:[prt1~prt2~]..>   Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~
+
+                                                    Examples:
+                                                    - Single IP without port: 192.168.1.1
+                                                    - Single IP with one port: 192.168.1.1:80
+                                                    - Single IP with multiple ports: 192.168.1.1:80~443
+                                                    - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
+                                                    - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24    
+
+      -w, --direction <ingress/egress/both>          Desired direction of the networking conditions (ingress, egress, or both). (default: both)
+
+      -l, --latency <latency>                        Desired latency in milliseconds (e.g., 30 for 30ms)
+      -j, --jitter <jitter>                          Desired jitter in milliseconds (e.g., 3 for 3ms). Requires --latency
+      -x, --packet_loss <packet_loss>                Desired packet loss in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -y, --duplicate <duplicate>                    Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -z, --corrupt <corrupt>                        Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -k, --reorder <reorder>                        Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+
+## Examples
 To simulate 100ms latency, 1.3ms jitter, and 5% packet loss on the eth0 interface for traffic going to 192.168.1.10, run:
 
-    ./latencyninja.sh \
-            --interface eth0 \
-            --destination 192.168.1.10 \
-            --latency 100 \
-            --jitter 1.3 \
-            --packet-loss 5   
+    ./latencyninja \ 
+          --interface eth0 --dst_ip 192.168.100.123 --latency 5 
+
+    ./latencyninja \ 
+          --interface eth0 --dst_ip 192.168.100.123:80~443 --latency 5 --jitter 0.1 --direction ingress
+
+    ./latencyninja \ 
+          --interface eth0 --dst_ip 192.168.100.0/24:80~443,192.168.120.2:8080~9090 --latency 5 --jitter 0.1 --packet-loss 0.5 --duplicate 0.1
+
+    ./latencyninja \
+          --interface eth0 --src_ip 192.168.100.123 --dst_ip 192.168.100.121 -l 5 --direction egress
+
+To display current network perturbations rules, run:
+
+    ./latencyninja \
+          --query
 
 To roll back previously applied network perturbations, run:
 
-    ./latencyninja.sh -i eth0 -r
-
-## Screenshot
-
-<img width="1218" alt="Screenshot" src="https://github.com/haythamelkhoja/latencyninja/assets/450702/2da458ed-8ec6-400c-be85-bf448cfd783a">
+    ./latencyninja \
+          --interface eth0 --rollback
 
 ## Warning
 - Any changes made by Latency Ninja will not persist after a reboot or a network restart (yet)
