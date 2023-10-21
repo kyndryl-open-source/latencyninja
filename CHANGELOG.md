@@ -1,3 +1,11 @@
+CHANGELOG 1.6
+- Refactored the entire code base, optimized and compacted it
+- Removed test functions
+- Divided source code into multiple files for readiability
+- General enhancements
+- Created a --query to display current tc rules
+- Introduced --about and optimized--help
+
 CHANGELOG 1.5
 - Added a latencyninjaquery.sh capability to show current rules (work in progress)
 - Added capabilities to add rules based on multiple destination ports
