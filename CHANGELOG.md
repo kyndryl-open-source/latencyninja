@@ -1,3 +1,12 @@
+CHANGELOG 1.8
+- Created AI Generated Logo for Latency Ninja
+- Fixed load_ifb_module outputting that module is already available
+- Added inetutils-ping as part of depdencies for Debian based systems and iptules for red hat based systems
+- Added .git/hooks/pre-commit to change the version variable every time a commit is done.
+- Fixed a set default src_ip and dst_ip based on rules
+- Added a :0 to local_ip so now all IPs have at least a port, 0 means: any
+- rollback_everything is called every time before setting new rules. This needs to become smart to only overwrite what is changed.
+
 CHANGELOG 1.7
 - Fixed GPL License to v2.0 all over
 

@@ -13,6 +13,13 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
+# Function to determine if a destination is a single host IP or a network
+is_single_host() {
+    local host="$1" ip_part="${host%%/*}" subnet_mask="${host#*/}"
+    [[ "$host" == *"/"* ]] && { IFS='.' read -ra ip_octets <<< "$ip_part"; [[ "$subnet_mask" =~ ^[0-9]+$ ]] && ((subnet_mask >= 0 && subnet_mask <= 32)) && { [[ ${#ip_octets[@]} -gt 1 || "$subnet_mask" != "32" ]] && return 1; }; }
+    return 0
+}
+
 # Function to create virtual interfaces
 create_virtual_interface() {
     local interface="$1"
@@ -63,25 +70,33 @@ delete_qdisc_if_exists() {
 }
 
 # Function to rollback network perturbations changes
+# Function to rollback network perturbations changes
 rollback_everything() {
+    local silent="$1"
+    
     if [ "$rollback_required" -eq 1 ] && [ "$rollback_done" -eq 0 ]; then
-        echo -n "Rolling back network perturbations changes. "
+        [[ "$silent" != "silent" ]] && echo -n "Rolling back network perturbations changes. "
+        
         # Ensure global variables are not empty
         if [[ -z $tc_path ]] || [[ -z $ip_path ]] || [[ -z $eth_interface ]] || \
            [[ -z $ifb0_interface ]] || [[ -z $ifb1_interface ]]; then
             die "Missing required global variables in rollback_everything function."
         fi
+        
         # Remove tc Filters
         $tc_path filter del dev "$eth_interface" parent 1: 2>/dev/null
         $tc_path filter del dev "$eth_interface" parent ffff: 2>/dev/null
+        
         # Flush tc qdiscs
         $tc_path qdisc del dev "$ifb0_interface" root 2>/dev/null
         $tc_path qdisc del dev "$ifb1_interface" root 2>/dev/null
         $tc_path qdisc del dev "$eth_interface" ingress 2>/dev/null
         $tc_path qdisc del dev "$eth_interface" root 2>/dev/null
+        
         # Remove ifb virtual interfaces
         $ip_path link delete dev "$ifb0_interface" 2>/dev/null
         $ip_path link delete dev "$ifb1_interface" 2>/dev/null
+        
         rollback_done=1
     fi
 }

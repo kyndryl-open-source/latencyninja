@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-# Function to validate arguments given in latencyninja.sh 
+# Function to validate arguments given
 get_arguments() {
     [ $# -eq 0 ] && usage && die "No options provided. See usage above." && exit 1
 
@@ -21,7 +21,7 @@ get_arguments() {
         case "$1" in
             -h|--help) usage; exit 0 ;;
             -a|--about) about; exit 0 ;;
-            -q|--query) query; exit 0 ;;  # Call query() function and exit
+            -q|--query) query; exit 0 ;; 
             --debug) debug=true; shift ;;
             -r|--rollback) rollback_required=1; shift ;;
             -i|--interface) eth_interface="$2"; interface_provided=1; shift 2 ;;
@@ -51,10 +51,17 @@ parse_arguments() {
         fi
     fi
 
-    local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk '{print $4}' | cut -d'/' -f1)
+    local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk '{print $4}' | cut -d'/' -f1):0
 
-    # Check if the array is empty
-    [ "${#src_ip[@]}" -eq 0 ] && src_ip=("$local_ip")  # Assign as an array
+    # If src_ip is provided but dst_ip is not, set dst_ip to local_ip
+    if [ "${#src_ip[@]}" -gt 0 ] && [ "${#dst_ip[@]}" -eq 0 ]; then
+        dst_ip=("$local_ip")  # Assign as an array
+    fi
+
+    # If src_ip is not provided, set it to local_ip
+    if [ "${#src_ip[@]}" -eq 0 ]; then
+         src_ip=("$local_ip")  # Assign as an array
+    fi
 
     # Validate mandatory parameters
     [ -z "$eth_interface" ] || [ "${#src_ip[@]}" -eq 0 ] || [ "${#dst_ip[@]}" -eq 0 ] || [ -z "$direction" ] &&
@@ -99,21 +106,24 @@ validate_numeric() {
     awk -v val="$val" 'BEGIN{if(val<=0) exit 1; print val}' || die "Invalid $2 format. Use a positive numeric value for $2."
 }
 
-# Function to process source IP argument
+# Function to process destination Source IP argument
 validate_src_ip() {
-    local entry="$1"
-    if [[ "$entry" == *":"* ]]; then
-        ip=$(echo "$entry" | cut -d':' -f1)
-        ports=$(echo "$entry" | cut -d':' -f2 | tr '~' ' ')
-        for port in $ports; do
-            src_ip=("$ip:$port")
-        done
-    else
-        src_ip=("$entry:0")
-    fi
+    local entries="$1"
+    IFS=',' read -ra src_entries <<< "$entries"
+    for entry in "${src_entries[@]}"; do
+        if [[ "$entry" == *":"* ]]; then
+            ip=$(echo "$entry" | cut -d':' -f1)
+            ports=$(echo "$entry" | cut -d':' -f2 | tr '~' ' ')
+            for port in $ports; do
+                src_ip+=("$ip:$port")
+            done
+        else
+            src_ip+=("$entry:0")
+        fi
+    done
 }
 
-# Function to process destination IP argument
+# Function to process destination Destination IP argument
 validate_dst_ip() {
     local entries="$1"
     IFS=',' read -ra dst_entries <<< "$entries"
@@ -160,6 +170,8 @@ validate_ip() {
 # Function to display parameters and results
 display_params() {
     local stage="$1"
+
+    echo 
     echo "Network perturbations $stage with the following parameters:" 
     [ -n "$eth_interface" ] && echo "  - Interface: $eth_interface"   
     for sip in "${src_ip[@]}"; do

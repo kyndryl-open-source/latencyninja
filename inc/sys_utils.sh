@@ -95,10 +95,10 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("curl" "kmod" "iproute2" "bc")
+            local packages=("curl" "kmod" "iproute2" "inetutils-ping" "bc")
             ;;
         centos|fedora|rhel)
-            local packages=("curl" "kmod" "iproute" "kernel-modules-extra" "iproute-tc")
+            local packages=("curl" "kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils")
             ;;
         *)
             echo "Unsupported OS: $os_type"
@@ -138,21 +138,12 @@ check_system_requirements() {
             echo "Please install the missing packages and run the script again."
             exit 1
         fi
-    fi
+    fi    
 }
 
 # Function to load the ifb module
 load_ifb_module() {
     if ! lsmod | grep -q ifb; then
         $modprobe_path ifb || die "Failed to load the ifb module."
-    else
-        echo "The ifb module is already loaded."
     fi
-}
-
-# Function to determine if a destination is a single host IP or a network
-is_single_host() {
-    local host="$1" ip_part="${host%%/*}" subnet_mask="${host#*/}"
-    [[ "$host" == *"/"* ]] && { IFS='.' read -ra ip_octets <<< "$ip_part"; [[ "$subnet_mask" =~ ^[0-9]+$ ]] && ((subnet_mask >= 0 && subnet_mask <= 32)) && { [[ ${#ip_octets[@]} -gt 1 || "$subnet_mask" != "32" ]] && return 1; }; }
-    return 0
 }
