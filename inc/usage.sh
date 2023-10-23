@@ -82,3 +82,10 @@ usage() {
     echo
     exit 0
 }
+
+version() {
+    echo
+    echo "Latency Ninja $current_version"
+    echo
+    exit 0
+}
