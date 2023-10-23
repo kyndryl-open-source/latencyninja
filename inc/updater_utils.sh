@@ -54,7 +54,7 @@ check_version() {
       return 0
     fi
   else
-    echo "Your version is newer than the latest version available online. No update needed."
+    echo "Your version is already the latest version. No update needed."
   fi
   
   return 1

@@ -1,3 +1,6 @@
+CHANGELOG 1.13
+- Fixing the updater to get the latest version directly from github. Still BETA 
+
 CHANGELOG 1.12
 - Fixed root/sudo checks
 - Fixed the updater to get the latest version directly from github. Still BETA
