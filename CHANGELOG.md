@@ -1,3 +1,6 @@
+CHANGELOG 1.14
+- Testing updater.
+
 CHANGELOG 1.13
 - Fixing the updater to get the latest version directly from github. Still BETA 
 
