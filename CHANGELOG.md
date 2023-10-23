@@ -1,3 +1,6 @@
+CHANGELOG 1.16
+- Testing updater.
+
 CHANGELOG 1.15
 - Testing updater.
 
