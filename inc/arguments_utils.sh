@@ -25,7 +25,7 @@ get_arguments() {
             -a|--about) about; exit 0 ;;
             -q|--query) query; exit 0 ;; 
             --debug) debug=true; shift ;;
-            --update) update; shift ;;
+            --update) update; exit 0 ;;
             -r|--rollback) rollback_required=1; shift;;
             -i|--interface) process_arg eth_interface interface_provided "$@"; shift 2 ;;
             -s|--src_ip) process_arg validate_src_ip "" "$@"; shift 2 ;;

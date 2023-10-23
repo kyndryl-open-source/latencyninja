@@ -1,3 +1,6 @@
+CHANGELOG 1.10
+- Fixed the updater. Still BETA
+
 CHANGELOG 1.9
 - Added an updater function to check if there's a new version and allow the user to update. BETA
 - Re-did the get_arguments to better expect user arguments.
