@@ -69,10 +69,7 @@ update_repo() {
       echo "git could not be found. Please install it to proceed."
       return 1
     fi
-    
-    # Navigate to the repository directory
-    cd "$repo_dir" || return 1
-    
+        
     # Update the repository
     git pull &> /dev/null
     if [ $? -ne 0 ]; then
