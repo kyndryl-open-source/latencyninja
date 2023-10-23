@@ -14,27 +14,25 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 die() {
-    local exit_code=${1:-$?}
-    local script_name=${BASH_SOURCE[1]}
-    local line_number=${BASH_LINENO[0]}
-    local function_name=${FUNCNAME[1]}
-    shift
+    local exit_code
+    if [[ $1 =~ ^[0-9]+$ ]]; then
+        exit_code=$1
+        shift
+    else
+        exit_code=1
+    fi
+    
     local message="${@:-"Unknown error occurred."}"
 
-    if $debug; then
+    if [ "$debug" = true ]; then
+        local script_name="${BASH_SOURCE[1]:-unknown_script}"
+        local line_number="${BASH_LINENO[0]:-unknown_line}"
+        local function_name="${FUNCNAME[1]:-unknown_function}"
         # Detailed error information for debugging
-        echo
-        printf "[%s v%s] Debug Error:\nFunction %s at line %s of %s with message:\n%s\n" "$app_name" "$current_version" "$function_name" "$line_number" "$script_name" "$message"
+        printf "Debug Error:\nFunction %s at line %s of %s with message: %s\n" "$function_name" "$line_number" "$script_name" "$message"
     else
         # Basic error information
-        printf "Error in %s: Function %s at line %s with message: %s\n" "$script_name" "$function_name" "$line_number" "$message"
-    fi
-
-    if [[ "$rollback_required" == 1 ]]; then
-        if type rollback_everything &>/dev/null; then
-            rollback_everything
-        fi
-        echo "Try again."
+        printf "Error: %s\n" "$message"
     fi
 
     exit $exit_code
