@@ -1,9 +1,13 @@
+CHANGELOG 1.11
+- Fixed the updater, if using git, it will go a git pull. Still BETA
+- Fixed an issue with --src_ip and ports for ip swapping
+
 CHANGELOG 1.10
 - Fixed the updater. Still BETA
 
 CHANGELOG 1.9
 - Added an updater function to check if there's a new version and allow the user to update. BETA
-- Re-did the get_arguments to better expect user arguments.
+- Re-did the get_arguments to better expect user arguments
 - Simplified a bit the die() function
 - Fixed a function to ensure that the interface exists
 
@@ -74,8 +78,8 @@ CHANGELOG 1.2
 - Other general enhancements
 
 CHANGELOG 1.1
-- Removed validate_direction() as it was not used.
-- Added more comments for readability and understanding.
+- Removed validate_direction() as it was not used
+- Added more comments for readability and understanding
 - Allows -h|--help to run without checking root and dependencies
 - Changed interpreter to #!/usr/bin/env bash
 - Enhanced create_virtual_interface()

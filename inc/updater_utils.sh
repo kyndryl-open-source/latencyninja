@@ -67,7 +67,7 @@ check_version() {
 }
 
 update_repo() {
-  local repo_url="$1"
+  local repo_dir="$1"
   
   # Check for git
   if ! command -v git &> /dev/null
@@ -76,8 +76,11 @@ update_repo() {
     return 1
   fi
   
-  # Download and update
-  git clone "$repo_url" &> /dev/null
+  # Navigate to the repository directory
+  cd "$repo_dir" || return 1
+  
+  # Update the repository
+  git pull &> /dev/null
   if [ $? -ne 0 ]; then
     echo "Failed to update the repository. Please check the URL and try again."
     return 1
@@ -90,7 +93,7 @@ update(){
   if check_version $repo $version_file; then
     read -p "Do you want to update to the latest version? (y/n) " answer
     if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
-      update_repo "https://github.com/user/repo.git"
+      update_repo $repo
       else
       echo "Update cancelled."
     fi

@@ -23,6 +23,7 @@ get_arguments() {
         case "$1" in
             -h|--help) usage; exit 0 ;;
             -a|--about) about; exit 0 ;;
+            -v|--version) version; exit 0;;
             -q|--query) query; exit 0 ;; 
             --debug) debug=true; shift ;;
             --update) update; exit 0 ;;
@@ -80,7 +81,7 @@ parse_arguments() {
     fi
     
     local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk '{print $4}' | cut -d'/' -f1):0
-    
+
     # If src_ip is provided but dst_ip is not, set dst_ip to local_ip
     if [ "${#src_ip[@]}" -gt 0 ] && [ "${#dst_ip[@]}" -eq 0 ]; then
         dst_ip=("$local_ip")  # Assign as an array
@@ -235,8 +236,7 @@ swap_ips_if_match() {
     [ "${#src_ip[@]}" -eq 0 ] || [ "${#dst_ip[@]}" -eq 0 ] && return  # return if either array is empty
 
     for index in "${!dst_ip[@]}"; do
-        extracted_ip="${dst_ip[$index]%%:*}"  # extract IP, considering optional port
-
+        extracted_ip="${dst_ip[$index]}"
         # Compare extracted IP with the local IP
         if [ "$extracted_ip" == "$local_ip" ]; then
             temp="${src_ip[$index]}"
