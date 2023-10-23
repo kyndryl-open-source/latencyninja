@@ -70,7 +70,6 @@ delete_qdisc_if_exists() {
 }
 
 # Function to rollback network perturbations changes
-# Function to rollback network perturbations changes
 rollback_everything() {
     local silent="$1"
     
@@ -99,4 +98,5 @@ rollback_everything() {
         
         rollback_done=1
     fi
+
 }

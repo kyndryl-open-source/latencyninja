@@ -15,7 +15,9 @@
 
 # Function to validate arguments given
 get_arguments() {
-    [ $# -eq 0 ] && usage && die "No options provided. See usage above." && exit 1
+    if [ $# -eq 0 ]; then
+        usage
+    fi
 
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
@@ -23,36 +25,62 @@ get_arguments() {
             -a|--about) about; exit 0 ;;
             -q|--query) query; exit 0 ;; 
             --debug) debug=true; shift ;;
-            -r|--rollback) rollback_required=1; shift ;;
-            -i|--interface) eth_interface="$2"; interface_provided=1; shift 2 ;;
-            -s|--src_ip) validate_src_ip "$2"; shift 2 ;;
-            -d|--dst_ip) validate_dst_ip "$2"; shift 2 ;;
-            -w|--direction) direction="$2"; shift 2 ;;
-            -l|--latency) latency="$2"; latency_provided=1; shift 2 ;;
-            -j|--jitter) jitter="$2"; jitter_provided=1; shift 2 ;;
-            -x|--packet_loss) packet_loss="$2"; shift 2 ;;
-            -y|--duplicate) duplicate="$2"; shift 2 ;;
-            -z|--corrupt) corrupt="$2"; shift 2 ;;
-            -k|--reorder) reorder="$2"; shift 2 ;;
+            --update) update; shift ;;
+            -r|--rollback) rollback_required=1; shift;;
+            -i|--interface) process_arg eth_interface interface_provided "$@"; shift 2 ;;
+            -s|--src_ip) process_arg validate_src_ip "" "$@"; shift 2 ;;
+            -d|--dst_ip) process_arg validate_dst_ip "" "$@"; shift 2 ;;
+            -w|--direction) process_arg direction "" "$@"; shift 2 ;;
+            -l|--latency) process_arg latency latency_provided "$@"; shift 2 ;;
+            -j|--jitter) process_arg jitter jitter_provided "$@"; shift 2 ;;
+            -x|--packet_loss) process_arg packet_loss "" "$@"; shift 2 ;;
+            -y|--duplicate) process_arg duplicate "" "$@"; shift 2 ;;
+            -z|--corrupt) process_arg corrupt "" "$@"; shift 2 ;;
+            -k|--reorder) process_arg reorder "" "$@"; shift 2 ;;
             *) echo "Invalid option: $1"; exit 1 ;;
         esac
     done
 }
 
+# Function to validate arguments given
+process_arg() {
+    local var_name="$1"
+    local flag_name="$2"
+    shift 2
+    if [[ -z "$2" || "$2" == -* ]]; then
+        die "The -$1 option requires an argument."
+    else
+        if [[ -n "$flag_name" ]]; then
+            declare -g "$flag_name=1"
+        fi
+        if [[ "$var_name" == validate_* ]]; then
+            "$var_name" "$2"
+        else
+            declare -g "$var_name=$2"
+        fi
+    fi
+}
+
 # Function to parse arguments
 parse_arguments() {
+    # Validate the selected interface
+    if ! ip link show "$eth_interface" &>/dev/null; then
+        die "Invalid interface: $eth_interface. Please provide a valid network interface."
+    fi
+
+    # Check thet -r is used with -i
     if [ "$rollback_required" -eq 1 ]; then
         if [ "$interface_provided" -eq 0 ]; then
-            die "The -r|--rollback option requires the -i|--interface option with a valid interface." && exit 1
+            die "The -r|--rollback option requires the -i|--interface option."
         else
             rollback_everything
             echo -e "\nRolled back network perturbations changes for interface $eth_interface."
             exit 0
         fi
     fi
-
+    
     local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk '{print $4}' | cut -d'/' -f1):0
-
+    
     # If src_ip is provided but dst_ip is not, set dst_ip to local_ip
     if [ "${#src_ip[@]}" -gt 0 ] && [ "${#dst_ip[@]}" -eq 0 ]; then
         dst_ip=("$local_ip")  # Assign as an array
@@ -67,20 +95,19 @@ parse_arguments() {
     [ -z "$eth_interface" ] || [ "${#src_ip[@]}" -eq 0 ] || [ "${#dst_ip[@]}" -eq 0 ] || [ -z "$direction" ] &&
         die "Interface, destination or source IP/network are mandatory. Use --help for usage information."
 
-    # Validate the selected interface
-    ! echo "$($ip_path -o link show | awk -F ': ' '{print $2}' | grep -v "lo")" | grep -wq "$eth_interface" &&
-        die "Invalid interface selected. Please choose a valid network interface."
-
-    # Validate direction
-    ! [[ "$direction" =~ ^(egress|ingress|both)$ ]] &&
-        die "Invalid direction. Valid options are: egress, ingress, or both."
-
-    # Validate parameters
+    # Validate other mandatory parameters
     [ -z "$latency" ] && [ -z "$jitter" ] && [ -z "$duplicate" ]  && [ -z "$corrupt" ] && [ -z "$reorder" ] && [ -z "$packet_loss" ] &&
         die "At least one of the parameters (latency, jitter, duplicate, corrupt, reorder, packet_loss) must be provided. Use --help for usage information."
 
-    [ "$latency_provided" -eq 0 ] && [ "$jitter_provided" -eq 1 ] &&
+    # Check that when using -j, the -l is set
+    if [ "$jitter_provided" -eq 1 ] && [ "$latency_provided" -eq 0 ]; then
         die "Jitter can only be used with latency. Use --help for usage information."
+    fi
+
+    # Check that direction is only egress, ingress, or both
+    if ! [[ "$direction" =~ ^(egress|ingress|both)$ ]]; then
+        die "Invalid direction. Valid options are: egress, ingress, or both."
+    fi        
 }
 
 # Function to validate arguments
@@ -98,6 +125,14 @@ validate_arguments() {
     [ -n "$duplicate" ] && duplicate=$(validate_numeric "$duplicate" "duplicate")
     [ -n "$corrupt" ] && corrupt=$(validate_numeric "$corrupt" "corrupt")
     [ -n "$reorder" ] && reorder=$(validate_numeric "$reorder" "reorder")
+}
+
+# Function to validate the interface
+validate_interface() {
+    local interface="$1"
+    if ! ip link show "$interface" &>/dev/null; then
+        die "Invalid interface: $interface. Please provide a valid network interface."
+    fi
 }
 
 # Function to validate numeric values

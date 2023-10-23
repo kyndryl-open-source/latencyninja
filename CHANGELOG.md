@@ -1,3 +1,9 @@
+CHANGELOG 1.9
+- Added an updater function to check if there's a new version and allow the user to update. BETA
+- Re-did the get_arguments to better expect user arguments.
+- Simplified a bit the die() function
+- Fixed a function to ensure that the interface exists
+
 CHANGELOG 1.8
 - Created AI Generated Logo for Latency Ninja
 - Fixed load_ifb_module outputting that module is already available

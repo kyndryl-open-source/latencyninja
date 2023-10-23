@@ -53,6 +53,8 @@ about() {
     echo "  -z, --corrupt <corrupt>                        Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)"
     echo "  -k, --reorder <reorder>                        Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)"
     echo
+
+    exit 0
 }
 
 usage() {
@@ -78,4 +80,5 @@ usage() {
     echo "  -z, --corrupt     Corrupt packet percentage (e.g., 2 or 0.9%)."
     echo "  -k, --reorder     Packet reordering percentage (e.g., 2 or 0.9%)."
     echo
+    exit 0
 }

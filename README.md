@@ -65,12 +65,12 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
       -s, --src_ip <ip,ip2,...>                      Desired source IP/Network. (default: IP of selected interface)
       -d, --dst_ip <ip:[prt1~],ip2:[prt1~prt2~]..>   Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~
 
-                                                    Examples:
-                                                    - Single IP without port: 192.168.1.1
-                                                    - Single IP with one port: 192.168.1.1:80
-                                                    - Single IP with multiple ports: 192.168.1.1:80~443
-                                                    - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
-                                                    - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24    
+                                                     Examples:
+                                                     - Single IP without port: 192.168.1.1
+                                                     - Single IP with one port: 192.168.1.1:80
+                                                     - Single IP with multiple ports: 192.168.1.1:80~443
+                                                     - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
+                                                     - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24    
 
       -w, --direction <ingress/egress/both>          Desired direction of the networking conditions (ingress, egress, or both). (default: both)
 
