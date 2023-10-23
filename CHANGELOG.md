@@ -1,3 +1,7 @@
+CHANGELOG 1.12
+- Fixed root/sudo checks
+- Fixed the updater to get the latest version directly from github. Still BETA
+
 CHANGELOG 1.11
 - Fixed the updater, if using git, it will go a git pull. Still BETA
 - Fixed an issue with --src_ip and ports for ip swapping
