@@ -14,7 +14,7 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Application Information
-declare -g app_name="Latency Ninja" current_version="1.9"  # Name and version of the application.
+declare -g app_name="Latency Ninja" current_version="1.9"
 declare -g repo="https://github.com/haythamelkhoja/latencyninja.git" version_file="./version.txt"
 
 # Network Interfaces
