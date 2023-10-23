@@ -15,7 +15,7 @@
 
 # Application Information
 declare -g app_name="Latency Ninja" current_version="1.13"
-declare -g repo="https://github.com/haythamelkhoja/latencyninja.git" version_file="./version.txt"
+declare -g repo_url="https://github.com/haythamelkhoja/latencyninja.git" version_url="https://raw.githubusercontent.com/haythamelkhoja/latencyninja/main/version.txt" version_file="version.txt" 
 
 # Network Interfaces
 declare -g ifb0_interface="ifb0" ifb1_interface="ifb1" eth_interface=""  # Network interfaces for traffic shaping.
