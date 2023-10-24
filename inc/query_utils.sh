@@ -37,8 +37,7 @@ extract_netem_details() {
     tc -s qdisc show dev "$dev" | grep -E "delay|loss|duplicate|reorder|corrupt" | sed 's/^.*delay/netem: delay/' | sed 's/  / jitter /' | sed 's/gap [0-9]*//'
 }
 
-query(){
-    
+query(){    
     # Extract all network devices
     devices=$(ls /sys/class/net/)
 

@@ -112,8 +112,7 @@ parse_arguments() {
 }
 
 # Function to validate arguments
-validate_arguments() {
-    # Validate IPs and numeric values
+validate_arguments() {    
     for sip in "${src_ip[@]}"; do 
         [ -n "$sip" ] && validate_ip "$sip" "src_ip"
     done

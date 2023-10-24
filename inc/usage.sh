@@ -29,7 +29,10 @@ about() {
     echo
     echo "Options:"
     echo
-    echo "  -h, --help                                     Display this help message"
+    echo "  -h, --help                                     Display help message"
+    echo "  -a, --about                                    Display this about message"
+    echo "  -v, --version                                  Display current version"
+    echo    
     echo "  -q, --query                                    Display current tc rules"
     echo "  -r, --rollback                                 Rollback any networking conditions changes and redirections. Requires --interface"
     echo
@@ -53,6 +56,8 @@ about() {
     echo "  -z, --corrupt <corrupt>                        Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)"
     echo "  -k, --reorder <reorder>                        Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)"
     echo
+    echo "  --update                                        Checks and updates to the latest version from Github"
+    echo
 
     exit 0
 }
@@ -64,7 +69,10 @@ usage() {
     echo "Usage: $0 --interface <interface> --dst_ip <destination> [options]"
     echo
     echo "Options:"
-    echo "  -h, --help        Display this help message."
+    echo "  -h, --help        Display help message."
+    echo "  -a, --about       Display about message."
+    echo "  -v, --version     Display current version."
+    echo    
     echo "  -q, --query       Display current tc rules."
     echo "  -r, --rollback    Rollback networking changes. (Requires -i)"
     echo

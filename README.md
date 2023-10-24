@@ -19,16 +19,14 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 🎯 Target Multiple Destination IP/Networks: Specify the destination IP addresses or networks.
 * 🌍 Filter by Source IP/Network: Specify the source IP address or network.
 
-## Compatibility
-
-Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based systems and requires superuser privileges to run.
-
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Compatibility](#compatibility)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Examples](#Examples)
+- [Updates](#Updates)
 - [Warning](#warning)
 - [Troubleshooting](#troubleshooting)
 - [Roadmap](#Roadmap)
@@ -37,73 +35,107 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
 ## Prerequisites
 
-1. Make sure you have `tc` and `netem` installed on your system.
-2. Root or superuser privileges are required to run the script.
+1. Latency Ninja requires the following packages installed on the system, however it will also attempt to dnf install/apt install missing packages:
+      - kmod, iproute, kernel-modules-extra, iproute-tc, iputils, bc, curl, git.
+2. `root` or `sudo` privileges are required.
+
+## Compatibility
+
+Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based systems and requires superuser privileges to run.
 
 ## Installation
 
-    git clone https://github.com/haythamelkhoja/latencyninja
-    cd latencyninja
-    chmod +x ./latencyninja    
+Clone this repository:
 
-    ./latencyninja --help
+      git clone https://github.com/haythamelkhoja/latencyninja
 
+Browse to directory:
+
+      cd latencyninja
+
+Add executible permissions:
+
+      chmod +x ./latencyninja
+  
  ## Usage
           
-      $0 --interface <interface> 
-              --dst_ip <destination_ip/destination_network:port> 
-              [--src_ip <source_ip/destination_network>] 
-              [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]
+      ./latencyninja --interface <interface> 
+                   --dst_ip <destination_ip/destination_network:port> 
+                  [--src_ip <source_ip/destination_network>] 
+                  [--direction <direction>]
+                  [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]
 
       Options:
 
-      -h, --help                                     Display this help message
-      -q, --query                                    Display current tc rules
-      -r, --rollback                                 Rollback any networking conditions changes and redirections. Requires --interface
+      -h, --help                                      Display thelp message
+      -a, --about                                     Display about message
+      -v, --version                                   Display current version
 
-      -i, --interface <interface>                    Desired network interface (e.g., eth0)
-      -s, --src_ip <ip,ip2,...>                      Desired source IP/Network. (default: IP of selected interface)
-      -d, --dst_ip <ip:[prt1~],ip2:[prt1~prt2~]..>   Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~
+      -q, --query                                     Display current tc rules applied
+      -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface
 
-                                                     Examples:
-                                                     - Single IP without port: 192.168.1.1
-                                                     - Single IP with one port: 192.168.1.1:80
-                                                     - Single IP with multiple ports: 192.168.1.1:80~443
-                                                     - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
-                                                     - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24    
+      -i, --interface <interface>                     Desired network interface (e.g., eth0)
+      -s, --src_ip <ip,ip2,...>                       Desired source IP/Network. (default: IP of selected interface)
+      -d, --dst_ip <ip:[prt1~],ip2:[prt1~prt2~]..>    Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~
 
-      -w, --direction <ingress/egress/both>          Desired direction of the networking conditions (ingress, egress, or both). (default: both)
+                                                      Examples:
+                                                      - Single IP without port: 192.168.1.1
+                                                      - Single IP with one port: 192.168.1.1:80
+                                                      - Single IP with multiple ports: 192.168.1.1:80~443
+                                                      - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
+                                                      - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24    
 
-      -l, --latency <latency>                        Desired latency in milliseconds (e.g., 30 for 30ms)
-      -j, --jitter <jitter>                          Desired jitter in milliseconds (e.g., 3 for 3ms). Requires --latency
-      -x, --packet_loss <packet_loss>                Desired packet loss in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
-      -y, --duplicate <duplicate>                    Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
-      -z, --corrupt <corrupt>                        Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
-      -k, --reorder <reorder>                        Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -w, --direction <ingress/egress/both>           Desired direction of the networking conditions (ingress, egress, or both). (default: both)
+
+      -l, --latency <latency>                         Desired latency in milliseconds (e.g., 30 for 30ms)
+      -j, --jitter <jitter>                           Desired jitter in milliseconds (e.g., 3 for 3ms). Requires --latency
+      -x, --packet_loss <packet_loss>                 Desired packet loss in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -y, --duplicate <duplicate>                     Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -z, --corrupt <corrupt>                         Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+
+      --update                                        Checks and updates to the latest version from Github
 
 ## Examples
 
-    ./latencyninja \ 
-          --interface eth0 --dst_ip 192.168.100.123 --latency 5 
+      ./latencyninja \ 
+                  --interface eth0 \
+                  --dst_ip 192.168.100.123 \
+                  --latency 5 
 
-    ./latencyninja \ 
-          --interface eth0 --dst_ip 192.168.100.123:80~443 --latency 5 --jitter 0.1 --direction ingress
+      ./latencyninja \ 
+                  --interface eth0 \
+                  --dst_ip 192.168.100.123:80~443 \
+                  --latency 5 --jitter 0.1 \
+                  --direction ingress
 
-    ./latencyninja \ 
-          --interface eth0 --dst_ip 192.168.100.0/24:80~443,192.168.120.2:8080~9090 --latency 5 --jitter 0.1 --packet-loss 0.5 --duplicate 0.1
+      ./latencyninja \ 
+                  --interface eth0 \
+                  --dst_ip 192.168.100.0/24:80~443,192.168.120.2:8080~9090 \
+                  --latency 5 --jitter 0.1 --packet-loss 0.5 --duplicate 0.1
 
-    ./latencyninja \
-          --interface eth0 --src_ip 192.168.100.123 --dst_ip 192.168.100.121 -l 5 --direction egress
+      ./latencyninja \
+                  --interface eth0 \
+                  --src_ip 192.168.100.123 \
+                  --dst_ip 192.168.100.121 \
+                  --latency 5 --jitter 0.2 
+                  --direction egress
 
 To display current network perturbations rules, run:
 
-    ./latencyninja \
-          --query
+      ./latencyninja --query
 
 To roll back previously applied network perturbations, run:
 
-    ./latencyninja \
-          --interface eth0 --rollback
+      ./latencyninja \
+                  --interface eth0 \
+                  --rollback
+
+## Update
+
+To update Latency Ninja to the lastest version, run:
+
+    ./latencyninja --update
 
 ## Warning
 - Any changes made by Latency Ninja will not persist after a reboot or a network restart (yet)
@@ -116,8 +148,6 @@ To roll back previously applied network perturbations, run:
 ## Roadmap
 - Persist network perturbations policies after network interface restart and reboots.
 - Schedule rollbacks.
-- Auto download dependencies.
-- Add traffic shaping capabilities.
 
 ## Contributing
 We welcome contributions! If you'd like to contribute, please create a pull request with your changes.
