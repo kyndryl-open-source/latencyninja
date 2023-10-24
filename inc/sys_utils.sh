@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
+# Global die() function
 die() {
     local exit_code
     if [[ $1 =~ ^[0-9]+$ ]]; then
@@ -38,6 +39,7 @@ die() {
     exit $exit_code
 }
 
+# Function for debugging
 debug_command() {
     local command="$*"
     echo "Running: $command"
@@ -57,6 +59,8 @@ find_command_paths() {
     ping_path=$(command -v ping 2>/dev/null)
     ip_path=$(command -v ip 2>/dev/null)
     modprobe_path=$(command -v modprobe 2>/dev/null)
+    git_path=$(command -v git 2>/dev/null)
+    curl_path=$(command -v curl 2>/dev/null)
 
     # Handle missing commands
     if [[ -z $tc_path ]]; then
@@ -67,6 +71,10 @@ find_command_paths() {
         die "The 'ip' command is required but it's not installed. Please install it and retry."
     elif [[ -z $modprobe_path ]]; then
         die "The 'modprobe' command is required but it's not installed. Please install it and retry."
+    elif [[ -z $git_path ]]; then
+        die "The 'git' command is required but it's not installed. Please install it and retry."
+    elif [[ -z $curl_path ]]; then
+        die "The 'curl' command is required but it's not installed. Please install it and retry."        
     fi
 }
 
@@ -93,10 +101,10 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("curl" "kmod" "iproute2" "inetutils-ping" "bc" "curl")
+            local packages=("kmod" "iproute2" "inetutils-ping" "bc" "curl" "git")
             ;;
         centos|fedora|rhel)
-            local packages=("curl" "kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "curl")
+            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "bc" "curl" "git")
             ;;
         *)
             echo "Unsupported OS: $os_type"

@@ -1,3 +1,8 @@
+CHANGELOG 1.17
+- Git hooks cleanup
+- Enhanced updater
+- Enhanced README file to show the new capabilities
+
 CHANGELOG 1.16
 - Testing updater.
 

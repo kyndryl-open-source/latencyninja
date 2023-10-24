@@ -15,16 +15,18 @@
 
 # Application Information
 declare -g app_name="Latency Ninja" current_version="1.16"
+
+# Updater Information
 declare -g repo_url="https://github.com/haythamelkhoja/latencyninja.git" version_url="https://raw.githubusercontent.com/haythamelkhoja/latencyninja/main/version.txt" version_file="version.txt" 
 
 # Network Interfaces
-declare -g ifb0_interface="ifb0" ifb1_interface="ifb1" eth_interface=""  # Network interfaces for traffic shaping.
+declare -g ifb0_interface="ifb0" ifb1_interface="ifb1" eth_interface=""
 
-# IP Addresses
-declare -g local_ip="" src_ip=() dst_ip=()  # Local IP address, source and destination IPs for traffic shaping.
+# Local IP address, source and destination IPs.
+declare -g local_ip="" src_ip=() dst_ip=()  
 
-# Traffic Shaping Parameters
-declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder=""  # Parameters for simulating network conditions.
+# Network perturbation earameters
+declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder="" 
 
 # Options and Flags
 declare -g direction="both"  # Traffic direction for shaping (options: both, inbound, outbound).
@@ -32,7 +34,7 @@ declare -g interface_provided=0 jitter_provided=0 latency_provided=0  # Flags fo
 declare -g rollback_required=0 rollback_done=0 ips_swapped=0  # Flags for script behavior and state.
 
 # Declare global variables for command paths
-declare -g tc_path="" ping_path="" ip_path="" mod_probe=""
+declare -g tc_path="" ping_path="" ip_path="" mod_probe="" git_path="" curl_path=""
 
 # Debugging
-declare -g debug=false  # Flag for enabling/disabling debug mode.
+declare -g debug=false

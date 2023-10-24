@@ -49,6 +49,7 @@ bring_up_interface() {
 
     $ip_path link set dev "$interface" up || die "Failed to bring up $interface."
 }
+
 # Function to delete existing qdisc if it exists
 delete_qdisc_if_exists() {
     local interface="$1"
@@ -98,5 +99,4 @@ rollback_everything() {
         
         rollback_done=1
     fi
-
 }
