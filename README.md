@@ -67,34 +67,35 @@ Add executible permissions:
 
       Options:
 
-      -h, --help                                      Display thelp message
-      -a, --about                                     Display about message
-      -v, --version                                   Display current version
+      -h, --help                                      Display thelp message.
+      -a, --about                                     Display about message.
+      -v, --version                                   Display current version.
 
-      -q, --query                                     Display current tc rules applied
-      -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface
+      -q, --query                                     Display current tc rules applied.
+      -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface.
 
-      -i, --interface <interface>                     Desired network interface (e.g., eth0)
-      -s, --src_ip <ip,ip2,...>                       Desired source IP/Network. (default: IP of selected interface)
-      -d, --dst_ip <ip:[prt1~],ip2:[prt1~prt2~]..>    Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~
+      -i, --interface <interface>                     Desired network interface (e.g., eth0).
+      -s, --src_ip <ip,ip2,...>                       Desired source IP/Network. (default: IP of selected interface).
+      -d, --dst_ip <ip:[prt1~],ip2:[prt1~prt2~]..>    Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~.
 
                                                       Examples:
                                                       - Single IP without port: 192.168.1.1
                                                       - Single IP with one port: 192.168.1.1:80
                                                       - Single IP with multiple ports: 192.168.1.1:80~443
                                                       - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
-                                                      - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24    
+                                                      - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24
 
-      -w, --direction <ingress/egress/both>           Desired direction of the networking conditions (ingress, egress, or both). (default: both)
+      -w, --direction <ingress/egress/both>           Desired direction of the networking conditions (ingress, egress, or both). (default: both).
 
-      -l, --latency <latency>                         Desired latency in milliseconds (e.g., 30 for 30ms)
-      -j, --jitter <jitter>                           Desired jitter in milliseconds (e.g., 3 for 3ms). Requires --latency
-      -x, --packet_loss <packet_loss>                 Desired packet loss in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
-      -y, --duplicate <duplicate>                     Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
-      -z, --corrupt <corrupt>                         Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
-      -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)
+      -l, --latency <latency>                         Desired latency in milliseconds (e.g., 30 for 30ms).
+      -j, --jitter <jitter>                           Desired jitter in milliseconds (e.g., 3 for 3ms). Requires --latency.
+      -x, --packet_loss <packet_loss>                 Desired packet loss in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
+      -y, --duplicate <duplicate>                     Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
+      -z, --corrupt <corrupt>                         Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
+      -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
 
-      --update                                        Checks and updates to the latest version from Github
+      --json <path/file.json>                         Path to JSON file.
+      --update                                        Checks and updates to the latest version from Github.
 
 ## Examples
 
@@ -120,6 +121,27 @@ Add executible permissions:
                   --dst_ip 192.168.100.121 \
                   --latency 5 --jitter 0.2 
                   --direction egress
+
+To use a JSON file using the --json option, run:
+
+      ./latencyninja \
+                  --json file.json
+
+
+Make sure the JSON file is formated using the following template:
+
+      {
+            "interface": "ens192",
+            "src_ip": "192.168.100.121",
+            "dst_ip": "192.168.100.123:80~443,192.168.100.0/24",
+            "direction": "egress",
+            "latency": "30",
+            "jitter": "5",
+            "packet_loss": "0.5",
+            "duplicate": "1",
+            "corrupt": "0.1",
+            "reorder": "2"
+      }
 
 To display current network perturbations rules, run:
 
