@@ -101,10 +101,10 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("kmod" "iproute2" "inetutils-ping" "bc" "curl" "git")
+            local packages=("kmod" "iproute2" "inetutils-ping" "bc" "curl" "git" "jq")
             ;;
         centos|fedora|rhel)
-            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "bc" "curl" "git")
+            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "bc" "curl" "git" "jq")
             ;;
         *)
             echo "Unsupported OS: $os_type"

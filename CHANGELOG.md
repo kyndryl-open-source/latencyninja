@@ -1,3 +1,6 @@
+CHANGELOG 1.18
+- Added a feature to import arguments from JSON using --json file.json
+
 CHANGELOG 1.17
 - Git hooks cleanup
 - Enhanced updater

@@ -14,7 +14,7 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Application Information
-declare -g app_name="Latency Ninja" current_version="1.17"
+declare -g app_name="Latency Ninja" current_version="1.18"
 
 # Updater Information
 declare -g repo_url="https://github.com/haythamelkhoja/latencyninja.git" version_url="https://raw.githubusercontent.com/haythamelkhoja/latencyninja/main/version.txt" version_file="version.txt" 
@@ -24,6 +24,9 @@ declare -g ifb0_interface="ifb0" ifb1_interface="ifb1" eth_interface=""
 
 # Local IP address, source and destination IPs.
 declare -g local_ip="" src_ip=() dst_ip=()  
+
+# JSON File
+declare -g json_file="" json_interface="" json_src_ip="" json_dst_ip="" json_latency="" json_jitter="" json_packet_loss="" json_duplicate="" json_corrupt="" json_reorder=""
 
 # Network perturbation earameters
 declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder="" 

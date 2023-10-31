@@ -1,1 +1,8 @@
 workspace.sh
+testingscripts/testing_samples.txt
+testingscripts/ibmmq/msqc.txt
+testingscripts/ibmmq/write.py
+testingscripts/rabbitmq/HOWTO
+testingscripts/rabbitmq/read.py
+testingscripts/rabbitmq/write.py
+test.json

@@ -25,8 +25,6 @@ get_arguments() {
             -a|--about) about; exit 0 ;;
             -v|--version) version; exit 0;;
             -q|--query) query; exit 0 ;; 
-            --debug) debug=true; shift ;;
-            --update) update; exit 0 ;;
             -r|--rollback) rollback_required=1; shift;;
             -i|--interface) process_arg eth_interface interface_provided "$@"; shift 2 ;;
             -s|--src_ip) process_arg validate_src_ip "" "$@"; shift 2 ;;
@@ -38,6 +36,9 @@ get_arguments() {
             -y|--duplicate) process_arg duplicate "" "$@"; shift 2 ;;
             -z|--corrupt) process_arg corrupt "" "$@"; shift 2 ;;
             -k|--reorder) process_arg reorder "" "$@"; shift 2 ;;
+            --json) json_file="$2"; shift 2 ;;
+            --update) update; exit 0 ;;
+            --debug) debug=true; shift ;;
             *) echo "Invalid option: $1"; exit 1 ;;
         esac
     done
@@ -47,6 +48,7 @@ get_arguments() {
 process_arg() {
     local var_name="$1"
     local flag_name="$2"
+
     shift 2
     if [[ -z "$2" || "$2" == -* ]]; then
         die "The -$1 option requires an argument."
@@ -64,6 +66,45 @@ process_arg() {
 
 # Function to parse arguments
 parse_arguments() {
+    # If a JSON file is provided, parse the arguments from the JSON file
+    if [ ! -z "$json_file" ]; then
+        json_interface=$(jq -r '.interface // empty' "$json_file")
+        [ ! -z "$json_interface" ] && eth_interface="$json_interface"
+
+        # For src_ip
+        json_src_ip=$(jq -r '.src_ip // empty' "$json_file")
+        if [ ! -z "$json_src_ip" ]; then
+            validate_src_ip $json_src_ip
+        fi
+
+        # For dst_ip
+        json_dst_ip=$(jq -r '.dst_ip // empty' "$json_file")
+        if [ ! -z "$json_dst_ip" ]; then
+            validate_dst_ip $json_dst_ip
+        fi
+
+        json_direction=$(jq -r '.direction // empty' "$json_file")
+        [ ! -z "$json_direction" ] && direction="$json_direction"
+
+        json_latency=$(jq -r '.latency // empty' "$json_file")
+        [ ! -z "$json_latency" ] && latency="$json_latency"
+
+        json_jitter=$(jq -r '.jitter // empty' "$json_file")
+        [ ! -z "$json_jitter" ] && jitter="$json_jitter"
+
+        json_duplicate=$(jq -r '.duplicate // empty' "$json_file")
+        [ ! -z "$json_duplicate" ] && duplicate="$json_duplicate"
+
+        json_corrupt=$(jq -r '.corrupt // empty' "$json_file")
+        [ ! -z "$json_corrupt" ] && corrupt="$json_corrupt"
+
+        json_reorder=$(jq -r '.reorder // empty' "$json_file")
+        [ ! -z "$json_reorder" ] && reorder="$json_reorder"
+
+        json_packet_loss=$(jq -r '.packet_loss // empty' "$json_file")
+        [ ! -z "$json_packet_loss" ] && packet_loss="$json_packet_loss"
+    fi
+
     # Validate the selected interface
     if ! ip link show "$eth_interface" &>/dev/null; then
         die "Invalid interface: $eth_interface. Please provide a valid network interface."
@@ -144,6 +185,7 @@ validate_numeric() {
 # Function to process destination Source IP argument
 validate_src_ip() {
     local entries="$1"
+
     IFS=',' read -ra src_entries <<< "$entries"
     for entry in "${src_entries[@]}"; do
         if [[ "$entry" == *":"* ]]; then
@@ -161,6 +203,7 @@ validate_src_ip() {
 # Function to process destination Destination IP argument
 validate_dst_ip() {
     local entries="$1"
+
     IFS=',' read -ra dst_entries <<< "$entries"
     for entry in "${dst_entries[@]}"; do
         if [[ "$entry" == *":"* ]]; then
