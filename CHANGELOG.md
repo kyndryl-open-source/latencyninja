@@ -1,3 +1,9 @@
+CHANGELOG 1.19
+- Enhanced import arguments from JSON
+- Enhanced find_command_paths()
+- Removed 'bc' as a required package
+- Added more debug information when using --debug
+
 CHANGELOG 1.18
 - Added a feature to import arguments from JSON using --json file.json
 
@@ -13,10 +19,10 @@ CHANGELOG 1.15
 - Testing updater.
 
 CHANGELOG 1.14
-- Testing updater.
+- Testing updater
 
 CHANGELOG 1.13
-- Fixing the updater to get the latest version directly from github. Still BETA 
+- Fixing the updater to get the latest version directly from Github. Still BETA 
 
 CHANGELOG 1.12
 - Fixed root/sudo checks

@@ -14,7 +14,7 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Application Information
-declare -g app_name="Latency Ninja" current_version="1.18"
+declare -g app_name="Latency Ninja" current_version="1.19"
 
 # Updater Information
 declare -g repo_url="https://github.com/haythamelkhoja/latencyninja.git" version_url="https://raw.githubusercontent.com/haythamelkhoja/latencyninja/main/version.txt" version_file="version.txt" 
@@ -36,8 +36,23 @@ declare -g direction="both"  # Traffic direction for shaping (options: both, inb
 declare -g interface_provided=0 jitter_provided=0 latency_provided=0  # Flags for user-provided options.
 declare -g rollback_required=0 rollback_done=0 ips_swapped=0  # Flags for script behavior and state.
 
-# Declare global variables for command paths
-declare -g tc_path="" ping_path="" ip_path="" mod_probe="" git_path="" curl_path=""
+# Function to check full paths of commands
+find_command_paths() {
+    local required_commands=("tc" "ping" "ip" "modprobe" "git" "curl" "jq")
+    local cmd
+    local cmd_path
+    local var_name
+
+    for cmd in "${required_commands[@]}"; do
+        cmd_path=$(command -v "$cmd" 2>/dev/null)
+        if [[ -z $cmd_path ]]; then
+            die "The '$cmd' command is required but it's not installed. Please install it and retry."
+        else
+            var_name="${cmd}_path"
+            declare -g "$var_name=$cmd_path"
+        fi
+    done
+}
 
 # Debugging
 declare -g debug=false
