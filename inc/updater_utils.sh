@@ -50,7 +50,7 @@ check_version() {
 update_repo() {
     local repo_dir="$1"
     
-    git_path pull &> /dev/null || die "Failed to update the repository. Please check the URL and try again."
+    $git_path pull &> /dev/null || die "Failed to update the repository. Please check the URL and try again."
     echo "$app_name updated successfully!"
 }
 

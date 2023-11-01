@@ -1,3 +1,6 @@
+CHANGELOG 1.20
+- Fixed updater
+
 CHANGELOG 1.19
 - Enhanced import arguments from JSON
 - Enhanced find_command_paths()
