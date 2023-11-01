@@ -32,11 +32,11 @@ main() {
     find_command_paths
     get_arguments "$@"
     parse_arguments 
-    validate_arguments    
+    validate_arguments
     rollback_required=1
     load_ifb_module
     rollback_everything silent
-    display_params "applying"
+    display_params "Applying"
     if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then        
         create_virtual_interface "$ifb0_interface"
         bring_up_interface "$ifb0_interface"
@@ -47,7 +47,9 @@ main() {
         bring_up_interface "$ifb1_interface"        
         configure_egress_traffic_controls "$eth_interface" "$ifb1_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
     fi
-    display_params "applied"
+    if [ $? -eq 0 ]; then
+        display_params "Applied"
+    fi
 }
 
 main "$@"

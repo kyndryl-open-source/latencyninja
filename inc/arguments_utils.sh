@@ -68,45 +68,39 @@ process_arg() {
 parse_arguments() {
     # If a JSON file is provided, parse the arguments from the JSON file
     if [ ! -z "$json_file" ]; then
-        json_interface=$(jq -r '.interface // empty' "$json_file")
+        json_interface=$($jq_path -r '.interface // empty' "$json_file")
         [ ! -z "$json_interface" ] && eth_interface="$json_interface"
 
-        # For src_ip
-        json_src_ip=$(jq -r '.src_ip // empty' "$json_file")
-        if [ ! -z "$json_src_ip" ]; then
-            validate_src_ip $json_src_ip
-        fi
+        json_src_ip=$($jq_path -r '.src_ip // empty' "$json_file")
+        [ ! -z "$json_src_ip" ] && validate_src_ip "$json_src_ip"
 
-        # For dst_ip
-        json_dst_ip=$(jq -r '.dst_ip // empty' "$json_file")
-        if [ ! -z "$json_dst_ip" ]; then
-            validate_dst_ip $json_dst_ip
-        fi
+        json_dst_ip=$($jq_path -r '.dst_ip // empty' "$json_file")
+        [ ! -z "$json_dst_ip" ] && validate_dst_ip "$json_dst_ip"
 
-        json_direction=$(jq -r '.direction // empty' "$json_file")
+        json_direction=$($jq_path -r '.direction // empty' "$json_file")
         [ ! -z "$json_direction" ] && direction="$json_direction"
 
-        json_latency=$(jq -r '.latency // empty' "$json_file")
+        json_latency=$($jq_path -r '.latency // empty' "$json_file")
         [ ! -z "$json_latency" ] && latency="$json_latency"
 
-        json_jitter=$(jq -r '.jitter // empty' "$json_file")
+        json_jitter=$($jq_path -r '.jitter // empty' "$json_file")
         [ ! -z "$json_jitter" ] && jitter="$json_jitter"
 
-        json_duplicate=$(jq -r '.duplicate // empty' "$json_file")
+        json_duplicate=$($jq_path -r '.duplicate // empty' "$json_file")
         [ ! -z "$json_duplicate" ] && duplicate="$json_duplicate"
 
-        json_corrupt=$(jq -r '.corrupt // empty' "$json_file")
+        json_corrupt=$($jq_path -r '.corrupt // empty' "$json_file")
         [ ! -z "$json_corrupt" ] && corrupt="$json_corrupt"
 
-        json_reorder=$(jq -r '.reorder // empty' "$json_file")
+        json_reorder=$($jq_path -r '.reorder // empty' "$json_file")
         [ ! -z "$json_reorder" ] && reorder="$json_reorder"
 
-        json_packet_loss=$(jq -r '.packet_loss // empty' "$json_file")
+        json_packet_loss=$($jq_path -r '.packet_loss // empty' "$json_file")
         [ ! -z "$json_packet_loss" ] && packet_loss="$json_packet_loss"
     fi
 
     # Validate the selected interface
-    if ! ip link show "$eth_interface" &>/dev/null; then
+    if ! $ip_path link show "$eth_interface" &>/dev/null; then
         die "Invalid interface: $eth_interface. Please provide a valid network interface."
     fi
 
@@ -250,7 +244,7 @@ display_params() {
     local stage="$1"
 
     echo 
-    echo "Network perturbations $stage with the following parameters:" 
+    echo "$stage network perturbations with the following parameters:" 
     [ -n "$eth_interface" ] && echo "  - Interface: $eth_interface"   
     for sip in "${src_ip[@]}"; do
         [ -n "$sip" ] && echo "  - Source IP/Network: $sip"       
@@ -265,10 +259,11 @@ display_params() {
     [ -n "$duplicate" ] && echo "  - Duplication: $duplicate %"    
     [ -n "$corrupt" ] && echo "  - Corruption: $corrupt %"
     [ -n "$reorder" ] && echo "  - Reorder: $reorder %"
-    
-    if [ "$stage" = "applied" ]; then
+
+    if [ "$stage" = "Applied" ]; then
         echo
-        echo "To rollback, run $0 --rollback --interface $eth_interface"
+        echo "To validate, run: $0 --query"
+        echo "To rollback, run: $0 --rollback --interface $eth_interface"
     fi
     echo 
 }

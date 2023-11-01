@@ -18,6 +18,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
   * 📤 Egress Traffic Only: Apply conditions to outgoing traffic.
 * 🎯 Target Multiple Destination IP/Networks: Specify the destination IP addresses or networks.
 * 🌍 Filter by Source IP/Network: Specify the source IP address or network.
+* <span style="color:red;font-weight:bold;">{ }</span> JSON Support: Allows performing network conditions programmatically.
 
 ## Table of Contents
 
@@ -26,7 +27,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
 - [Installation](#installation)
 - [Usage](#usage)
 - [Examples](#Examples)
-- [Updates](#Updates)
+- [Updating](#Updating)
 - [Warning](#warning)
 - [Troubleshooting](#troubleshooting)
 - [Roadmap](#Roadmap)
@@ -36,7 +37,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
 ## Prerequisites
 
 1. Latency Ninja requires the following packages installed on the system, however it will also attempt to dnf install/apt install missing packages:
-      - kmod, iproute, kernel-modules-extra, iproute-tc, iputils, bc, curl, git.
+      - kmod, iproute, kernel-modules-extra, iproute-tc, iputils, curl, git, jq.
 2. `root` or `sudo` privileges are required.
 
 ## Compatibility
@@ -60,10 +61,10 @@ Add executible permissions:
  ## Usage
           
       ./latencyninja --interface <interface> 
-                   --dst_ip <destination_ip/destination_network:port> 
-                  [--src_ip <source_ip/destination_network>] 
-                  [--direction <direction>]
-                  [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]
+                     --dst_ip <destination IP/Network:port~port~port> 
+                     [--src_ip <source IP/network>] 
+                     [--direction <direction>]
+                     [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]
 
       Options:
 
@@ -83,7 +84,7 @@ Add executible permissions:
                                                       - Single IP with one port: 192.168.1.1:80
                                                       - Single IP with multiple ports: 192.168.1.1:80~443
                                                       - Multiple IPs with and without ports: 192.168.1.1,192.168.1.2:80,192.168.1.4:80~443~8080
-                                                      - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2./24:80~443,192.168.3.0/24
+                                                      - Multiple IPs and Subnets with and without ports: 192.168.1.1,192.168.2.0/24:80~443,192.168.3.0/24
 
       -w, --direction <ingress/egress/both>           Desired direction of the networking conditions (ingress, egress, or both). (default: both).
 
@@ -153,7 +154,7 @@ To roll back previously applied network perturbations, run:
                   --interface eth0 \
                   --rollback
 
-## Update
+## Updating
 
 To update Latency Ninja to the lastest version, run:
 

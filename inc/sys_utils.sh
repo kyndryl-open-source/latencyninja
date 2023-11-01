@@ -29,8 +29,13 @@ die() {
         local script_name="${BASH_SOURCE[1]:-unknown_script}"
         local line_number="${BASH_LINENO[0]:-unknown_line}"
         local function_name="${FUNCNAME[1]:-unknown_function}"
+        local script_vars
+        
         # Detailed error information for debugging
         printf "Debug Error:\nFunction %s at line %s of %s with message: %s\n" "$function_name" "$line_number" "$script_name" "$message"
+        script_vars=$(declare -p | grep -v '^declare \-[^ ]* [A-Z_][A-Z0-9_]*=')
+        printf "Script Variables:\n%s\n" "$script_vars"
+
     else
         # Basic error information
         printf "Error: %s\n" "$message"
@@ -50,31 +55,6 @@ debug_command() {
     if [ $? -ne 0 ]; then
         echo "Error: Failed to execute $command"
         exit 1  # or any action you'd like to perform on failure
-    fi
-}
-
-# Function to check full paths of commands
-find_command_paths() {
-    tc_path=$(command -v tc 2>/dev/null)
-    ping_path=$(command -v ping 2>/dev/null)
-    ip_path=$(command -v ip 2>/dev/null)
-    modprobe_path=$(command -v modprobe 2>/dev/null)
-    git_path=$(command -v git 2>/dev/null)
-    curl_path=$(command -v curl 2>/dev/null)
-
-    # Handle missing commands
-    if [[ -z $tc_path ]]; then
-        die "The 'tc' command is required but it's not installed. Please install it and retry."
-    elif [[ -z $ping_path ]]; then
-        die "The 'ping' command is required but it's not installed. Please install it and retry."
-    elif [[ -z $ip_path ]]; then
-        die "The 'ip' command is required but it's not installed. Please install it and retry."
-    elif [[ -z $modprobe_path ]]; then
-        die "The 'modprobe' command is required but it's not installed. Please install it and retry."
-    elif [[ -z $git_path ]]; then
-        die "The 'git' command is required but it's not installed. Please install it and retry."
-    elif [[ -z $curl_path ]]; then
-        die "The 'curl' command is required but it's not installed. Please install it and retry."        
     fi
 }
 
@@ -101,10 +81,10 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("kmod" "iproute2" "inetutils-ping" "bc" "curl" "git" "jq")
+            local packages=("kmod" "iproute2" "inetutils-ping" "curl" "git" "jq")
             ;;
         centos|fedora|rhel)
-            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "bc" "curl" "git" "jq")
+            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "curl" "git" "jq")
             ;;
         *)
             echo "Unsupported OS: $os_type"

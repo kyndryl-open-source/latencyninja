@@ -18,6 +18,8 @@ check_version() {
     local version_url="$1"
     local version_file="$2"
     
+    echo "$app_name Updater - BETA"
+
     # Get the latest version from the URL
     local latest_version
     latest_version=$($curl_path -sL "$version_url") || die "Failed to fetch the latest version. Please check the URL and try again."
@@ -47,7 +49,7 @@ check_version() {
 
 update_repo() {
     local repo_dir="$1"
-            
+    
     git_path pull &> /dev/null || die "Failed to update the repository. Please check the URL and try again."
     echo "$app_name updated successfully!"
 }
