@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-
+# Function to get CIDR notation from the subnet mask
 get_cidr_from_mask() {
     local mask_decimal="$1"
     local count=0
@@ -27,16 +27,19 @@ get_cidr_from_mask() {
     echo $count
 }
 
+# Function to convert HEX to IP as HEX is used by tc.
 convert_hex_to_ip() {
     local ip_hex="$1"
     printf "%d.%d.%d.%d" $(echo $ip_hex | sed 's/../0x& /g')
 }
 
+# Function to extract current tc netem rules
 extract_netem_details() {
     local dev="$1"
     tc -s qdisc show dev "$dev" | grep -E "delay|loss|duplicate|reorder|corrupt" | sed 's/^.*delay/netem: delay/' | sed 's/  / jitter /' | sed 's/gap [0-9]*//'
 }
 
+# Function to query current tc rules
 query(){    
     # Extract all network devices
     devices=$(ls /sys/class/net/)

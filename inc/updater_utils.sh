@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-# Function to update from repo
+# Function to check the current and last version fron Github
 check_version() {
     local version_url="$1"
     local version_file="$2"
@@ -47,13 +47,15 @@ check_version() {
     fi
 }
 
+# Function to perform the update
 update_repo() {
     local repo_dir="$1"
     
-    $git_path pull &> /dev/null || die "Failed to update the repository. Please check the URL and try again."
+    sudo -u "$SUDO_USER" $git_path pull &> /dev/null || die "Failed to update the repository. Please check the URL and try again."
     echo "$app_name updated successfully!"
 }
 
+# Function to perform update
 update() {
     if check_version $version_url $version_file; then
         read -p "Do you want to update to the latest version? (y/n) " answer

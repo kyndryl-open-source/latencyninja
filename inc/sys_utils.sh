@@ -44,7 +44,7 @@ die() {
     exit $exit_code
 }
 
-# Function for debugging
+# Function to debug command run with variables for debugging purposes
 debug_command() {
     local command="$*"
     echo "Running: $command"
