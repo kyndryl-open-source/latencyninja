@@ -14,7 +14,7 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Application Information
-declare -g app_name="Latency Ninja" current_version="1.20"
+declare -g app_name="Latency Ninja" current_version="1.21"
 
 # Updater Information
 declare -g repo_url="https://github.com/kyndryl-open-source/latencyninja.git" version_url="https://raw.githubusercontent.com/kyndryl-open-source/latencyninja/main/version.txt" version_file="version.txt" 
