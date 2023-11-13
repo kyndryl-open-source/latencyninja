@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-# Function to display usage information
+# Function to display about information
 about() {
     echo 
     echo "Latency Ninja $current_version"
@@ -63,6 +63,7 @@ about() {
     exit 0
 }
 
+# Function to display usage information
 usage() {
     echo
     echo "Latency Ninja $current_version"
@@ -96,6 +97,7 @@ usage() {
     exit 0
 }
 
+# Function to display current version
 version() {
     echo
     echo "Latency Ninja $current_version"

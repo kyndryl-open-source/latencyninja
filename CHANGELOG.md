@@ -1,3 +1,8 @@
+CHANGELOG 1.21
+- Updater will run as original user to keep file permissoins consistent
+- Cleaned up some commenting and documentation
+- Changed location of repo to https://github.com/kyndryl-open-source/latencyninja
+
 CHANGELOG 1.20
 - Fixed updater
 

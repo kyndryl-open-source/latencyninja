@@ -14,10 +14,10 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Application Information
-declare -g app_name="Latency Ninja" current_version="1.20"
+declare -g app_name="Latency Ninja" current_version="1.21"
 
 # Updater Information
-declare -g repo_url="https://github.com/haythamelkhoja/latencyninja.git" version_url="https://raw.githubusercontent.com/haythamelkhoja/latencyninja/main/version.txt" version_file="version.txt" 
+declare -g repo_url="https://github.com/kyndryl-open-source/latencyninja.git" version_url="https://raw.githubusercontent.com/kyndryl-open-source/latencyninja/main/version.txt" version_file="version.txt" 
 
 # Network Interfaces
 declare -g ifb0_interface="ifb0" ifb1_interface="ifb1" eth_interface=""
