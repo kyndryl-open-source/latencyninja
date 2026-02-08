@@ -16,16 +16,16 @@
 # Function to capture a snapshot of all tc rules before changes
 backup_tc_snapshot() {
     local backup_file="$1"
-    local backup_dir
+    local target_dir
 
-    backup_dir=$(dirname "$backup_file")
+    target_dir=$(dirname "$backup_file")
 
-    if [ ! -d "$backup_dir" ]; then
-        die "Backup directory does not exist: $backup_dir"
+    if [ ! -d "$target_dir" ]; then
+        die "Backup directory does not exist: $target_dir"
     fi
 
-    if [ ! -w "$backup_dir" ]; then
-        die "Backup directory is not writable: $backup_dir"
+    if [ ! -w "$target_dir" ]; then
+        die "Backup directory is not writable: $target_dir"
     fi
 
     local devices

@@ -27,7 +27,9 @@ log_execution() {
         die "Log directory does not exist: $log_dir"
     fi
 
-    if [ ! -w "$log_dir" ] && [ ! -w "$log_file" ]; then
+    if [ -f "$log_file" ] && [ ! -w "$log_file" ]; then
+        die "Log file is not writable: $log_file"
+    elif [ ! -f "$log_file" ] && [ ! -w "$log_dir" ]; then
         die "Log directory is not writable: $log_dir"
     fi
 

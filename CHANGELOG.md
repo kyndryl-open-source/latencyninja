@@ -1,3 +1,8 @@
+CHANGELOG 1.22
+- Fixed check_system_requirements() to only check for 'git' when --update is used
+- Added an autobackup capability to keep track of current tc rules
+- Added a logging capability to keep track of injections 
+
 CHANGELOG 1.21
 - Updater will run as original user to keep file permissoins consistent
 - Cleaned up some commenting and documentation
@@ -13,7 +18,7 @@ CHANGELOG 1.19
 - Added more debug information when using --debug
 
 CHANGELOG 1.18
-- Added a feature to import arguments from JSON using --json file.json
+- Added a feature to import arguments from JSON using --json filejson
 
 CHANGELOG 1.17
 - Git hooks cleanup
@@ -21,10 +26,10 @@ CHANGELOG 1.17
 - Enhanced README file to show the new capabilities
 
 CHANGELOG 1.16
-- Testing updater.
+- Testing updater
 
 CHANGELOG 1.15
-- Testing updater.
+- Testing updater
 
 CHANGELOG 1.14
 - Testing updater
