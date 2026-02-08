@@ -81,10 +81,14 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("kmod" "iproute2" "inetutils-ping" "curl" "git" "jq")
+            local packages=("kmod" "iproute2" "inetutils-ping" "curl" "jq")
+            # git is only required for --update
+            [[ "$update_requested" -eq 1 ]] && packages+=("git")
             ;;
         centos|fedora|rhel)
-            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "curl" "git" "jq")
+            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "curl" "jq")
+            # git is only required for --update
+            [[ "$update_requested" -eq 1 ]] && packages+=("git")
             ;;
         *)
             echo "Unsupported OS: $os_type"

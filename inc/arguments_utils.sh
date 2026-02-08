@@ -37,6 +37,8 @@ get_arguments() {
             -z|--corrupt) process_arg corrupt "" "$@"; shift 2 ;;
             -k|--reorder) process_arg reorder "" "$@"; shift 2 ;;
             --json) json_file="$2"; shift 2 ;;
+            --backup) backup_dir="$2"; shift 2 ;;
+            --logging) log_file="$2"; shift 2 ;;
             --update) update; exit 0 ;;
             --debug) debug=true; shift ;;
             *) echo "Invalid option: $1"; exit 1 ;;

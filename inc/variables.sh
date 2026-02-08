@@ -36,9 +36,18 @@ declare -g direction="both"  # Traffic direction for shaping (options: both, inb
 declare -g interface_provided=0 jitter_provided=0 latency_provided=0  # Flags for user-provided options.
 declare -g rollback_required=0 rollback_done=0 ips_swapped=0  # Flags for script behavior and state.
 
+# Backup and Logging
+declare -g backup_dir="" log_file=""
+
 # Function to check full paths of commands
 find_command_paths() {
-    local required_commands=("tc" "ping" "ip" "modprobe" "git" "curl" "jq")
+    local required_commands=("tc" "ping" "ip" "modprobe" "curl" "jq")
+
+    # git is only required for --update
+    if [[ "$update_requested" -eq 1 ]]; then
+        required_commands+=("git")
+    fi
+
     local cmd
     local cmd_path
     local var_name
