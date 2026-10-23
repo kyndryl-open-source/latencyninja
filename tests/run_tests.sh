@@ -59,6 +59,19 @@ ping_stats() {
 
 tcp_rtt() { python3 "$tests_dir/helpers/tcp_rtt.py" "$1" "$2" "${3:-10}"; }
 
+# Throughput in Mbit/s: throughput HOST upload|download [SECONDS]
+throughput() { python3 "$tests_dir/helpers/throughput.py" "$1" "$2" "${3:-4}"; }
+
+# Wait up to N seconds (default 15) until an interface has no Latency Ninja rules
+wait_for_no_rules() {
+    local i
+    for i in $(seq 1 $(( ${2:-15} * 4 ))); do
+        tc qdisc show dev "$1" 2>/dev/null | grep -q 'prio 1:' || return 0
+        sleep 0.25
+    done
+    return 1
+}
+
 # Float comparison: between VALUE LOW HIGH
 between() { awk -v v="$1" -v lo="$2" -v hi="$3" 'BEGIN{exit !(v>=lo && v<=hi)}'; }
 
@@ -611,6 +624,170 @@ test_persist_restore_keeps_persistence() {
     check "persistence kept" [ -f /etc/latencyninja/persist/wg0.args ]
 }
 
+# ---------- tests: bandwidth rate ----------
+# netem queues up to 1000 packets, so measure a single direction per applied rule
+
+test_rate_egress() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate 2mbit --direction egress
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "netem rate configured" contains "$(tc qdisc show dev lne-$dev)" "rate 2Mbit"
+    local t; t=$(throughput 10.10.0.2 upload); check "upload ~2 Mbit/s (got $t)" between "$t" 1.6 2.2
+    t=$(throughput 10.10.0.3 upload 2); check "other host unaffected (got $t Mbit/s)" between "$t" 50 1000000
+}
+
+test_rate_ingress() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate 2mbit --direction ingress
+    local t; t=$(throughput 10.10.0.2 download); check "download ~2 Mbit/s (got $t)" between "$t" 1.6 2.2
+}
+
+test_rate_both_directions() {
+    # The rate applies to each direction (it isn't split like latency)
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate 5mbit
+    check "rate not halved on ingress" contains "$(tc qdisc show dev lni-$dev)" "rate 5Mbit"
+    check "rate not halved on egress" contains "$(tc qdisc show dev lne-$dev)" "rate 5Mbit"
+    local t; t=$(throughput 10.10.0.2 download); check "download ~5 Mbit/s (got $t)" between "$t" 4 5.5
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate 5mbit
+    t=$(throughput 10.10.0.2 upload); check "upload ~5 Mbit/s (got $t)" between "$t" 4 5.5
+}
+
+test_rate_port_and_units() {
+    ln --interface "$dev" --dst_ip 10.10.0.2:5001 --rate 512kbit --direction egress
+    local t; t=$(throughput 10.10.0.2 upload); check "port 5001 ~0.5 Mbit/s (got $t)" between "$t" 0.4 0.56
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate 1mbps --direction egress
+    check "bytes/s unit accepted" contains "$(tc qdisc show dev lne-$dev)" "rate 8Mbit"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate 2mbit --latency 50
+    check "rate combined with latency" contains "$(tc qdisc show dev lne-$dev)" "delay 25ms rate 2Mbit"
+    ln --query
+    check "query shows rate" contains "$out" "rate 2Mbit"
+}
+
+test_rate_validation() {
+    local bad
+    for bad in 5 2mb fast 0mbit; do
+        ln --interface "$dev" --dst_ip 10.10.0.2 --rate "$bad"
+        check "rate '$bad' rejected" contains "$out" "Invalid rate format"
+    done
+    ln --interface "$dev" --dst_ip 10.10.0.2 --rate -1mbit
+    check "negative rate rejected" contains "$out" "The --rate option requires an argument"
+    check "nothing applied" not_contains "$(tc qdisc show dev $dev)" "prio"
+}
+
+# ---------- tests: profiles ----------
+
+test_profile_apply() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile 4g
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "output names the profile" contains "$out" "Profile: 4g"
+    local q; q=$(tc qdisc show dev lne-$dev)
+    check "4g values applied (delay 30ms each way)" contains "$q" "delay 30ms"
+    check "4g rate applied" contains "$q" "rate 20Mbit"
+    check "4g loss applied" contains "$q" "loss 0.2%"
+    ping_stats 10.10.0.2 40; check "RTT ~60ms (got $avg)" between "$avg" 45 85
+}
+
+test_profile_override() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile 4g --latency 100 --direction egress
+    local q; q=$(tc qdisc show dev lne-$dev)
+    check "explicit latency wins" contains "$q" "delay 100ms"
+    check "profile rate kept" contains "$q" "rate 20Mbit"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile transatlantic --jitter 1
+    check "explicit jitter with profile latency accepted (exit $rc)" [ "$rc" -eq 0 ]
+}
+
+test_profile_list_and_errors() {
+    ln --profiles
+    check "lists built-in profiles" contains "$out" "satellite"
+    check "shows profile values" contains "$out" "latency 600ms"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile nope
+    check "unknown profile rejected" contains "$out" "Unknown profile: nope"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile ../../etc/passwd
+    check "path in profile name rejected" contains "$out" "Unknown profile"
+}
+
+test_profile_custom() {
+    mkdir -p /etc/latencyninja/profiles
+    echo '{ "description": "Test link", "latency": "70", "rate": "3mbit" }' > /etc/latencyninja/profiles/lntest.json
+    echo '{ "description": "Overridden", "latency": "44" }' > /etc/latencyninja/profiles/4g.json
+    ln --profiles
+    check "custom profile listed" contains "$out" "Test link (custom)"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile lntest --direction egress
+    check "custom profile applied" contains "$(tc qdisc show dev lne-$dev)" "delay 70ms rate 3Mbit"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile 4g --direction egress
+    check "custom file overrides built-in" contains "$(tc qdisc show dev lne-$dev)" "delay 44ms"
+    rm -f /etc/latencyninja/profiles/lntest.json /etc/latencyninja/profiles/4g.json
+}
+
+test_profile_saved_as_values() {
+    # Snapshots and persistence record the resolved values, so later profile edits don't change them
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile satellite --persist
+    local args; args=$(tr '\n' ' ' < /etc/latencyninja/persist/$dev.args)
+    check "persisted args contain resolved latency" contains "$args" "--latency 600"
+    check "persisted args contain resolved rate" contains "$args" "--rate 10mbit"
+    check "persisted args don't reference the profile" not_contains "$args" "--profile"
+}
+
+test_profile_and_rate_json() {
+    mkdir -p "$work_dir"
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"profile\": \"3g\", \"rate\": \"4mbit\", \"direction\": \"egress\" }" > "$work_dir/p.json"
+    ln --json "$work_dir/p.json"
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "JSON rate overrides profile rate" contains "$(tc qdisc show dev lne-$dev)" "delay 200ms"
+    check "JSON rate applied" contains "$(tc qdisc show dev lne-$dev)" "rate 4Mbit"
+}
+
+# ---------- tests: timed rollback ----------
+
+test_duration_expires_to_clean() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --duration 3s
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "reports the scheduled rollback" contains "$out" "Rollback of $dev scheduled"
+    check "query lists the timer" contains "$(cd "$repo_dir" && ./latencyninja --query </dev/null)" "Scheduled rollbacks: $dev in 0m"
+    ping_stats 10.10.0.2; check "rules active before expiry (got $avg)" between "$avg" 90 130
+    check "rules removed after expiry" wait_for_no_rules "$dev" 15
+    ping_stats 10.10.0.2; check "latency gone (got $avg)" between "$avg" 0 10
+    check "query no longer lists the timer" contains "$(cd "$repo_dir" && ./latencyninja --query </dev/null)" "Scheduled rollbacks: none"
+}
+
+test_duration_restores_previous() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 20 --rate 2mbit --duration 3s
+    ping_stats 10.10.0.2; check "temporary rules active (got $avg)" between "$avg" 18 40
+    local i
+    for i in $(seq 1 60); do tc qdisc show dev lne-$dev 2>/dev/null | grep -q 'delay 50ms' && break; sleep 0.25; done
+    sleep 0.5
+    ping_stats 10.10.0.2; check "previous rules restored after expiry (got $avg)" between "$avg" 90 130
+    check "temporary rate gone" not_contains "$(tc qdisc show dev lne-$dev)" "rate"
+}
+
+test_duration_cancelled() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --duration 3s
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100
+    sleep 5
+    ping_stats 10.10.0.2; check "re-applying without --duration cancels the timer (got $avg)" between "$avg" 90 130
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --duration 1h
+    ln --rollback --interface "$dev"
+    check "rollback cancels the timer" not_contains "$(systemctl list-timers --all --no-pager)" "latencyninja-rollback-$dev"
+}
+
+test_duration_multi_interface() {
+    ln --interface "$dev" --dst_ip 10.10.0.3 --latency 100 --duration 3s
+    ln --interface bond0 --dst_ip 10.40.0.2 --latency 60 --duration 1h
+    check "ln0 expired" wait_for_no_rules "$dev" 15
+    ping_stats 10.40.0.2; check "bond0 still shaped with its own timer (got $avg)" between "$avg" 55 80
+    check "bond0 timer still listed" contains "$(cd "$repo_dir" && ./latencyninja --query </dev/null)" "bond0 in 59m"
+}
+
+test_duration_validation() {
+    local bad
+    for bad in 5x 0 -5m 1.5h; do
+        ln --interface "$dev" --dst_ip 10.10.0.2 --latency 10 --duration "$bad"
+        check "duration '$bad' rejected (exit $rc)" [ "$rc" -ne 0 ]
+    done
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 10 --duration 10m --persist
+    check "--duration with --persist rejected" contains "$out" "cannot be combined with --persist"
+    check "nothing applied" not_contains "$(tc qdisc show dev $dev)" "prio"
+}
+
 # ---------- tests: updater ----------
 
 test_update() {
@@ -652,6 +829,9 @@ for t in \
     snapshot_save_restore snapshot_scoped snapshot_clean_state snapshot_restore_backup snapshot_errors \
     persist_wireguard_recreate persist_bond_recreate persist_rollback_removes persist_update_and_note \
     persist_restore_keeps_persistence \
+    rate_egress rate_ingress rate_both_directions rate_port_and_units rate_validation \
+    profile_apply profile_override profile_list_and_errors profile_custom profile_saved_as_values profile_and_rate_json \
+    duration_expires_to_clean duration_restores_previous duration_cancelled duration_multi_interface duration_validation \
     update
 do
     run_test "$t"
