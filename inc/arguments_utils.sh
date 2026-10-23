@@ -37,6 +37,13 @@ get_arguments() {
             -z|--corrupt) process_arg corrupt "" "$@"; shift 2 ;;
             -k|--reorder) process_arg reorder "" "$@"; shift 2 ;;
             --json) json_file="$2"; shift 2 ;;
+            --backup) backup_dir="$2"; shift 2 ;;
+            --logging) log_file="$2"; shift 2 ;;
+            --save) process_arg save_file "" "$@"; shift 2 ;;
+            --restore) process_arg restore_file "" "$@"; shift 2 ;;
+            --persist) persist=1; shift ;;
+            --apply-persisted) process_arg apply_persisted "" "$@"; shift 2 ;;
+            --keep-persist) keep_persist=1; shift ;;
             --update) update; exit 0 ;;
             --debug) debug=true; shift ;;
             *) echo "Invalid option: $1"; exit 1 ;;
@@ -99,23 +106,42 @@ parse_arguments() {
         [ ! -z "$json_packet_loss" ] && packet_loss="$json_packet_loss"
     fi
 
-    # Validate the selected interface
-    if ! $ip_path link show "$eth_interface" &>/dev/null; then
-        die "Invalid interface: $eth_interface. Please provide a valid network interface."
+    # Validate the interface if one was given to scope --save/--restore
+    if [ -n "$eth_interface" ] && { [ -n "$save_file" ] || [ -n "$restore_file" ]; }; then
+        $ip_path link show "$eth_interface" &>/dev/null || die "Invalid interface: $eth_interface. Please provide a valid network interface."
     fi
 
-    # Check thet -r is used with -i
-    if [ "$rollback_required" -eq 1 ]; then
-        if [ "$interface_provided" -eq 0 ]; then
-            die "The -r|--rollback option requires the -i|--interface option."
-        else
-            rollback_everything
-            echo -e "\nRolled back network perturbations changes for interface $eth_interface."
-            exit 0
-        fi
+    # Modes that don't apply new rules
+    [ -n "$apply_persisted" ] && { apply_persisted_rules "$apply_persisted"; exit $?; }
+    [ -n "$save_file" ] && { save_snapshot "$save_file" "$eth_interface"; exit $?; }
+    [ -n "$restore_file" ] && { restore_snapshot "$restore_file" "$eth_interface"; exit $?; }
+
+    # Check that -r is used with -i
+    if [ "$rollback_required" -eq 1 ] && [ "$interface_provided" -eq 0 ]; then
+        die "The -r|--rollback option requires the -i|--interface option."
     fi
+
+    # Validate the selected interface
+    if [ -z "$eth_interface" ] || ! $ip_path link show "$eth_interface" &>/dev/null; then
+        die "Invalid interface: $eth_interface. Please provide a valid network interface."
+    fi
+    set_ifb_interfaces "$eth_interface"
+
+    if [ "$rollback_required" -eq 1 ]; then
+        rollback_everything
+        clear_runtime_state "$eth_interface"
+        [ "$keep_persist" -eq 0 ] && unpersist_rules "$eth_interface"
+        echo -e "\nRolled back network perturbations changes for interface $eth_interface."
+        exit 0
+    fi
+
+    [ "$persist" -eq 1 ] && check_persist_supported
     
-    local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk '{print $4}' | cut -d'/' -f1):0
+    local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk 'NR==1 {print $4}' | cut -d'/' -f1)
+    if [ -z "$local_ip" ] && { [ "${#src_ip[@]}" -eq 0 ] || [ "${#dst_ip[@]}" -eq 0 ]; }; then
+        die "Interface $eth_interface has no IPv4 address. Assign one or provide both --src_ip and --dst_ip."
+    fi
+    local_ip="${local_ip}:0"
 
     # If src_ip is provided but dst_ip is not, set dst_ip to local_ip
     if [ "${#src_ip[@]}" -gt 0 ] && [ "${#dst_ip[@]}" -eq 0 ]; then
@@ -179,6 +205,7 @@ validate_numeric() {
 # Function to process destination Source IP argument
 validate_src_ip() {
     local entries="$1"
+    src_ip_arg="${src_ip_arg:+$src_ip_arg,}$entries"
 
     IFS=',' read -ra src_entries <<< "$entries"
     for entry in "${src_entries[@]}"; do
@@ -197,6 +224,7 @@ validate_src_ip() {
 # Function to process destination Destination IP argument
 validate_dst_ip() {
     local entries="$1"
+    dst_ip_arg="${dst_ip_arg:+$dst_ip_arg,}$entries"
 
     IFS=',' read -ra dst_entries <<< "$entries"
     for entry in "${dst_entries[@]}"; do

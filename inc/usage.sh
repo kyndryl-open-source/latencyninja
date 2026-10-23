@@ -57,6 +57,12 @@ about() {
     echo "  -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
     echo
     echo "  --json <path/file.json>                         Path to JSON file."
+    echo "  --backup <path>                                 Directory for tc rules backup files (default: /tmp/)."
+    echo "  --logging <path>                                Path for execution log file (default: /tmp/latencyninja.log)."
+    echo "  --persist                                       Re-apply the rules at boot and whenever the interface is re-created (requires systemd)."
+    echo "                                                  Persisted rules are removed with --rollback."
+    echo "  --save <file>                                   Save a restorable snapshot of the current rules (all interfaces, or only --interface)."
+    echo "  --restore <file>                                Restore the rules from a snapshot or backup file (all interfaces in it, or only --interface)."
     echo "  --update                                        Checks and updates to the latest version from Github."
     echo
 
@@ -92,6 +98,11 @@ usage() {
     echo "  -k, --reorder     Packet reordering percentage (e.g., 2 or 0.9%)."
     echo
     echo "  --json            Path to JSON file."
+    echo "  --backup          Directory for tc rules backup (default: /tmp/)."
+    echo "  --logging         Path for execution log (default: /tmp/latencyninja.log)."
+    echo "  --persist         Re-apply rules at boot and when the interface is re-created."
+    echo "  --save            Save a restorable snapshot of current rules to a file."
+    echo "  --restore         Restore rules from a snapshot or backup file."
     echo "  --update          Updates to the latest version."
     echo
     exit 0

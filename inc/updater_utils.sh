@@ -51,7 +51,12 @@ check_version() {
 update_repo() {
     local repo_dir="$1"
     
-    sudo -u "$SUDO_USER" $git_path pull &> /dev/null || die "Failed to update the repository. Please check the URL and try again."
+    local update_failed="Failed to update the repository. Please check the URL and try again."
+    if [ -n "$SUDO_USER" ]; then
+        sudo -u "$SUDO_USER" $git_path -C "$script_dir" pull &> /dev/null || die "$update_failed"
+    else
+        $git_path -C "$script_dir" pull &> /dev/null || die "$update_failed"
+    fi
     echo "$app_name updated successfully!"
 }
 

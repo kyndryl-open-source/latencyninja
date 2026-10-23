@@ -14,16 +14,16 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Application Information
-declare -g app_name="Latency Ninja" current_version="1.21"
+declare -g app_name="Latency Ninja" current_version="$(cat "$script_dir/version.txt" 2>/dev/null)"
 
 # Updater Information
-declare -g repo_url="https://github.com/kyndryl-open-source/latencyninja.git" version_url="https://raw.githubusercontent.com/kyndryl-open-source/latencyninja/main/version.txt" version_file="version.txt" 
+declare -g repo_url="https://github.com/kyndryl-open-source/latencyninja.git" version_url="https://raw.githubusercontent.com/kyndryl-open-source/latencyninja/main/version.txt" version_file="$script_dir/version.txt" 
 
-# Network Interfaces
-declare -g ifb0_interface="ifb0" ifb1_interface="ifb1" eth_interface=""
+# Network Interfaces (ifb names are derived per interface by set_ifb_interfaces: lni-<iface> ingress, lne-<iface> egress)
+declare -g ifb0_interface="" ifb1_interface="" eth_interface=""
 
-# Local IP address, source and destination IPs.
-declare -g local_ip="" src_ip=() dst_ip=()  
+# Local IP address, source and destination IPs. The *_arg variables keep the raw values given by the user.
+declare -g local_ip="" src_ip=() dst_ip=() src_ip_arg="" dst_ip_arg=""
 
 # JSON File
 declare -g json_file="" json_interface="" json_src_ip="" json_dst_ip="" json_latency="" json_jitter="" json_packet_loss="" json_duplicate="" json_corrupt="" json_reorder=""
@@ -36,9 +36,22 @@ declare -g direction="both"  # Traffic direction for shaping (options: both, inb
 declare -g interface_provided=0 jitter_provided=0 latency_provided=0  # Flags for user-provided options.
 declare -g rollback_required=0 rollback_done=0 ips_swapped=0  # Flags for script behavior and state.
 
+# Backup and Logging
+declare -g backup_dir="" log_file=""
+
+# Snapshots and Persistence
+declare -g state_dir="/run/latencyninja" persist_dir="/etc/latencyninja/persist" unit_file="/etc/systemd/system/latencyninja@.service" udev_rule_file="/etc/udev/rules.d/99-latencyninja.rules"
+declare -g save_file="" restore_file="" apply_persisted="" persist=0 keep_persist=0
+
 # Function to check full paths of commands
 find_command_paths() {
-    local required_commands=("tc" "ping" "ip" "modprobe" "git" "curl" "jq")
+    local required_commands=("tc" "ping" "ip" "modprobe" "curl" "jq")
+
+    # git is only required for --update
+    if [[ "$update_requested" -eq 1 ]]; then
+        required_commands+=("git")
+    fi
+
     local cmd
     local cmd_path
     local var_name

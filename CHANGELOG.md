@@ -1,3 +1,20 @@
+CHANGELOG 1.22
+- Fixed check_system_requirements() to only check for 'git' when --update is used
+- Added an autobackup capability to keep track of current tc rules
+- Added a logging capability to keep track of injections
+- Added --persist to re-apply rules at boot and when an interface is re-created (systemd + udev)
+- Added --save and --restore for restorable snapshots; automatic backups are now restorable snapshots
+- Each interface now uses its own ifb devices (lni-<iface>/lne-<iface>), so several interfaces can be shaped at once (previously shaping a second interface broke the first)
+- Verified support for bonded and WireGuard interfaces
+- Fixed --version reporting 1.21 (now read from version.txt)
+- Fixed the --rollback without --interface error message
+- Latency Ninja can now be run from any directory
+- Uses the first IPv4 address when an interface has several
+- Fixed --query listing bonding_masters as a device
+- Added a functional test suite under tests/ (Lima VMs, Ubuntu and Fedora)
+- Added GitHub Actions CI (lint, version/CHANGELOG check, functional tests) and automatic tagged releases on merge to main
+- Added tools/bump_version.sh to start a new version and CONTRIBUTING.md describing the workflow 
+
 CHANGELOG 1.21
 - Updater will run as original user to keep file permissoins consistent
 - Cleaned up some commenting and documentation
@@ -13,7 +30,7 @@ CHANGELOG 1.19
 - Added more debug information when using --debug
 
 CHANGELOG 1.18
-- Added a feature to import arguments from JSON using --json file.json
+- Added a feature to import arguments from JSON using --json filejson
 
 CHANGELOG 1.17
 - Git hooks cleanup
@@ -21,10 +38,10 @@ CHANGELOG 1.17
 - Enhanced README file to show the new capabilities
 
 CHANGELOG 1.16
-- Testing updater.
+- Testing updater
 
 CHANGELOG 1.15
-- Testing updater.
+- Testing updater
 
 CHANGELOG 1.14
 - Testing updater

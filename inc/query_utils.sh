@@ -42,7 +42,7 @@ extract_netem_details() {
 # Function to query current tc rules
 query(){    
     # Extract all network devices
-    devices=$(ls /sys/class/net/)
+    devices=$(list_network_devices)
 
     # Iterate over each device
     for dev in $devices; do
@@ -133,4 +133,8 @@ query(){
         echo "$(extract_netem_details "$dev")"
         echo ""
     done
+
+    local persisted
+    persisted=$(persisted_interfaces | tr '\n' ' ')
+    echo "Persisted interfaces: ${persisted:-none}"
 }

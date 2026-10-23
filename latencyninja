@@ -16,40 +16,70 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
+# Resolve the real location of this script so it can be run from any directory
+script_path="$(readlink -f "${BASH_SOURCE[0]}")"
+script_dir="$(dirname "$script_path")"
+
 # Include utility files
-. inc/variables.sh
-. inc/usage.sh
-. inc/updater_utils.sh
-. inc/arguments_utils.sh
-. inc/sys_utils.sh
-. inc/network_utils.sh
-. inc/traffic_control_utils.sh
-. inc/query_utils.sh
+. "$script_dir/inc/variables.sh"
+. "$script_dir/inc/usage.sh"
+. "$script_dir/inc/updater_utils.sh"
+. "$script_dir/inc/arguments_utils.sh"
+. "$script_dir/inc/sys_utils.sh"
+. "$script_dir/inc/network_utils.sh"
+. "$script_dir/inc/traffic_control_utils.sh"
+. "$script_dir/inc/query_utils.sh"
+. "$script_dir/inc/backup_utils.sh"
+. "$script_dir/inc/logging_utils.sh"
+. "$script_dir/inc/snapshot_utils.sh"
+. "$script_dir/inc/persist_utils.sh"
 
 # Global main function
 main() {
+    update_requested=0
+    for arg in "$@"; do
+        [[ "$arg" == "--update" ]] && update_requested=1 && break
+    done
     check_root
     check_system_requirements
     find_command_paths
     get_arguments "$@"
     parse_arguments 
     validate_arguments
+
+    # Set defaults for backup and logging paths
+    [ -z "$backup_dir" ] && backup_dir="/tmp"
+    [ -z "$log_file" ] && log_file="/tmp/latencyninja.log"
+    local backup_file="${backup_dir}/latencyninja_tc_backup_$(date +%Y%m%d_%H%M%S)_$$"
+
+    # Capture pre-change tc rules for all interfaces
+    backup_tc_snapshot "$backup_file"
+
     rollback_required=1
     load_ifb_module
     rollback_everything silent
     display_params "Applying"
-    if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then        
+    if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb0_interface"
         bring_up_interface "$ifb0_interface"
         configure_ingress_traffic_controls "$eth_interface" "$ifb0_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
     fi
     if [ "$direction" == "egress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb1_interface"
-        bring_up_interface "$ifb1_interface"        
+        bring_up_interface "$ifb1_interface"
         configure_egress_traffic_controls "$eth_interface" "$ifb1_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
     fi
-    if [ $? -eq 0 ]; then
-        display_params "Applied"
+    display_params "Applied"
+    save_runtime_state "$eth_interface"
+    append_applied_values "$backup_file"
+    log_execution "$log_file" "$@"
+    echo "Backup saved to: $backup_file (restore with: $0 --restore $backup_file)"
+    echo "Log updated at: $log_file"
+
+    if [ "$persist" -eq 1 ]; then
+        persist_rules "$eth_interface"
+    elif is_persisted "$eth_interface" && ! diff -q <(build_canonical_args) "$persist_dir/$eth_interface.args" &>/dev/null; then
+        echo "Note: $eth_interface has different persisted rules that will be re-applied at boot. Add --persist to replace them."
     fi
 }
 
