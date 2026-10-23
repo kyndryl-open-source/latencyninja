@@ -1,0 +1,1 @@
+{ "description": "3G mobile network", "latency": "200", "jitter": "40", "packet_loss": "1", "rate": "1500kbit" }

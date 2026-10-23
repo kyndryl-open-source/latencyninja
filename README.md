@@ -22,6 +22,9 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 🔗 Multiple interfaces: Shape several interfaces at once, including bonded (`bond0`) and WireGuard (`wg0`) interfaces.
 * 💾 Snapshots: Save the current rules to a file and restore them later. Every change also writes a restorable backup.
 * 📌 Persistence: Optionally re-apply rules at boot and whenever the interface is re-created (systemd).
+* 📶 Bandwidth: Limit throughput per direction to emulate slow links.
+* 🗂️ Profiles: Ready-made network profiles (3G, 4G, 5G, satellite, cross-region links, lossy Wi-Fi) and your own.
+* ⏲️ Timed rollback: Automatically restore the previous rules after a duration.
 
 ## Table of Contents
 
@@ -97,6 +100,10 @@ Add executible permissions:
       -y, --duplicate <duplicate>                     Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
       -z, --corrupt <corrupt>                         Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
       -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
+      -b, --rate <rate>                               Desired bandwidth limit per direction (e.g., 512kbit, 2mbit, 1gbit).
+      -p, --profile <name>                            Apply a network profile (e.g., 3g, 4g, satellite). Explicit options override its values.
+      --profiles                                      List the available profiles.
+      -t, --duration <time>                           Automatically roll back after a duration (e.g., 30s, 10m, 2h), restoring the previous rules.
 
       --json <path/file.json>                         Path to JSON file.
       --backup <path>                                 Directory for tc rules backup files (default: /tmp/).
@@ -150,7 +157,10 @@ Make sure the JSON file is formated using the following template:
             "packet_loss": "0.5",
             "duplicate": "1",
             "corrupt": "0.1",
-            "reorder": "2"
+            "reorder": "2",
+            "rate": "10mbit",
+            "profile": "4g",
+            "duration": "15m"
       }
 
 To display current network perturbations rules, run:
@@ -162,6 +172,44 @@ To roll back previously applied network perturbations, run:
       ./latencyninja \
                   --interface eth0 \
                   --rollback
+
+Optional JSON keys: `rate`, `profile` (explicit values in the file take precedence over the profile) and `duration`.
+
+## Bandwidth Limits
+
+Limit the bandwidth of the targeted traffic with `--rate`. Units are `bit`, `kbit`, `mbit`, `gbit` (bits per second) or `bps`, `kbps`, `mbps`, `gbps` (bytes per second). Unlike latency, which is split between ingress and egress when using `--direction both`, the rate applies to each direction:
+
+      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --rate 2mbit
+
+## Profiles
+
+Profiles apply a realistic combination of conditions in one option. List them with `--profiles`:
+
+| Profile | Latency (RTT) | Jitter | Loss | Rate |
+|---|---|---|---|---|
+| `3g` | 200ms | 40ms | 1% | 1500kbit |
+| `4g` | 60ms | 15ms | 0.2% | 20mbit |
+| `5g` | 20ms | 5ms | | 100mbit |
+| `satellite` | 600ms | 20ms | 0.5% | 10mbit |
+| `leo-satellite` | 40ms | 10ms | 0.5% | 100mbit |
+| `transatlantic` | 80ms | 5ms | | |
+| `transpacific` | 150ms | 10ms | | |
+| `lossy-wifi` | 15ms | 10ms | 3% (+0.5% duplicates) | 20mbit |
+
+Options given explicitly take precedence over the profile's values:
+
+      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g
+      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g --latency 150
+
+Add your own profiles as JSON files in `/etc/latencyninja/profiles/<name>.json`, using the same keys as `--json` plus a `description`. A custom profile with the same name as a built-in one replaces it. Snapshots and persisted rules store the resolved values, so editing a profile later doesn't change them.
+
+## Timed Rollback
+
+Use `--duration` to apply rules for a limited time, for example during a chaos experiment or to stay safe on a remote machine:
+
+      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --latency 200 --duration 15m
+
+When the time is up, the interface is restored from the backup taken just before the rules were applied: if it had no rules it is rolled back, and if it had earlier rules those are re-applied. `--query` shows pending rollbacks; `--rollback` ends the rules earlier, and applying new rules to the interface cancels its pending rollback. Durations accept `s`, `m`, `h` and `d` (default seconds). Timed rollback uses a systemd timer, so it requires systemd and can't be combined with `--persist`.
 
 ## Snapshots and Backups
 
@@ -209,7 +257,8 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- Schedule rollbacks.
+- Target containers and network namespaces (Docker, Podman, `--netns`, `--pid`).
+- IPv6 support.
 
 ## Contributing
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, tests and release process.

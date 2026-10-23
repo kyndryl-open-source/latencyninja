@@ -1,0 +1,1 @@
+{ "description": "Low Earth orbit satellite link (Starlink-like)", "latency": "40", "jitter": "10", "packet_loss": "0.5", "rate": "100mbit" }

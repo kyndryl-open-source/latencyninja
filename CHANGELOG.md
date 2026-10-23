@@ -1,3 +1,13 @@
+CHANGELOG 1.23
+- Starting with v1.23, I've started using Claude (Anthropic's AI assistant) to help develop Latency Ninja
+- Added --duration (-t) to roll back automatically after a time (e.g. 30s, 10m, 2h), restoring the rules that were in place before; --query shows pending rollbacks
+- Added --rate (-b) to limit bandwidth per direction (e.g. 512kbit, 2mbit, 1gbit)
+- Added --profile (-p) with built-in network profiles (3g, 4g, 5g, satellite, leo-satellite, transatlantic, transpacific, lossy-wifi), custom profiles in /etc/latencyninja/profiles and --profiles to list them
+- JSON files accept "rate", "profile" and "duration"
+- Fixed invalid numeric values (e.g. --latency 0) not stopping execution before tc was called
+- Fixed the "option requires an argument" error message showing three dashes
+- tools/bump_version.sh no longer makes the new version branch track origin/main
+
 CHANGELOG 1.22
 - Fixed check_system_requirements() to only check for 'git' when --update is used
 - Added an autobackup capability to keep track of current tc rules

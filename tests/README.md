@@ -26,4 +26,5 @@ same path, so edits on the host are tested immediately.
 `run_tests.sh` applies rules to `ln0` and verifies them by measuring real traffic
 (ping RTT/loss/duplicates, TCP connect times per port), plus `tc` state, `--query`,
 `--rollback`, JSON import, backup/logging files, snapshots, persistence (interface re-creation),
-bonded and WireGuard interfaces, validation errors and the updater.
+bonded and WireGuard interfaces, bandwidth limits (measured TCP throughput), profiles, timed
+rollbacks, validation errors and the updater.

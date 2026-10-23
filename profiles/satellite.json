@@ -1,0 +1,1 @@
+{ "description": "Geostationary satellite link", "latency": "600", "jitter": "20", "packet_loss": "0.5", "rate": "10mbit" }

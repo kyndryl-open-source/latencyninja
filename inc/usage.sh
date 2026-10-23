@@ -25,7 +25,8 @@ about() {
     echo "  $0 --interface <interface>"
     echo "          --dst_ip <destination_ip/destination_network:port>"
     echo "          [--src_ip <source_ip/destination_network>]"
-    echo "          [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]"
+    echo "          [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]"
+    echo "          [--profile <name>] [--duration <time>]"
     echo
     echo "  Options:"
     echo
@@ -55,6 +56,10 @@ about() {
     echo "  -y, --duplicate <duplicate>                     Desired duplicate packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
     echo "  -z, --corrupt <corrupt>                         Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
     echo "  -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%)."
+    echo "  -b, --rate <rate>                               Desired bandwidth limit per direction (e.g., 512kbit, 2mbit, 1gbit)."
+    echo "  -p, --profile <name>                            Apply a network profile (e.g., 3g, 4g, satellite). Explicit options override its values."
+    echo "  --profiles                                      List the available profiles."
+    echo "  -t, --duration <time>                           Automatically roll back after a duration (e.g., 30s, 10m, 2h), restoring the previous rules."
     echo
     echo "  --json <path/file.json>                         Path to JSON file."
     echo "  --backup <path>                                 Directory for tc rules backup files (default: /tmp/)."
@@ -96,6 +101,9 @@ usage() {
     echo "  -y, --duplicate   Duplicate packet percentage (e.g., 2 or 0.9%)."
     echo "  -z, --corrupt     Corrupt packet percentage (e.g., 2 or 0.9%)."
     echo "  -k, --reorder     Packet reordering percentage (e.g., 2 or 0.9%)."
+    echo "  -b, --rate        Bandwidth limit per direction (e.g., 2mbit)."
+    echo "  -p, --profile     Network profile (e.g., 3g, 4g, satellite). --profiles lists them."
+    echo "  -t, --duration    Automatic rollback after a duration (e.g., 10m)."
     echo
     echo "  --json            Path to JSON file."
     echo "  --backup          Directory for tc rules backup (default: /tmp/)."

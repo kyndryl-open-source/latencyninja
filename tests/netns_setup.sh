@@ -99,7 +99,7 @@ up() {
     nsenter --net="/run/netns/$ns" ip link set wgp0 up
     wg_up
 
-    setsid nsenter --net="/run/netns/$ns" python3 "$helpers_dir/listener.py" 80 443 8080 9090 </dev/null >/dev/null 2>&1 &
+    setsid nsenter --net="/run/netns/$ns" python3 "$helpers_dir/listener.py" 80 443 8080 9090 5001 5002 </dev/null >/dev/null 2>&1 &
     echo $! > "$pid_file"
     sleep 1
 }

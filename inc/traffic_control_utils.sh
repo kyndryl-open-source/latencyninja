@@ -25,6 +25,7 @@ configure_ingress_traffic_controls() {
     local duplicate="$8"
     local corrupt="$9"
     local reorder="${10}"
+    local rate="${11}"
 
     swap_ips_if_match # Allows to switch perspective of traffic direction
 
@@ -51,6 +52,7 @@ configure_ingress_traffic_controls() {
     [ -n "$duplicate" ] && netem_params="$netem_params duplicate $duplicate%"
     [ -n "$corrupt" ] && netem_params="$netem_params corrupt $corrupt%"
     [ -n "$reorder" ] && netem_params="$netem_params reorder $reorder%"
+    [ -n "$rate" ] && netem_params="$netem_params rate $rate"  # bandwidth is per direction, so it isn't halved for "both"
     
     # Apply delay to ingress (incoming) traffic on ifb0 for specific IP addresses
     delete_qdisc_if_exists "$ifb0_interface" "root" "prio 1:0"
@@ -93,6 +95,7 @@ configure_egress_traffic_controls() {
     local duplicate="$8"
     local corrupt="$9"
     local reorder="${10}"
+    local rate="${11}"
 
     swap_ips_if_match # Allows to switch perspective of traffic direction
 
@@ -119,6 +122,7 @@ configure_egress_traffic_controls() {
     [ -n "$duplicate" ] && netem_params="$netem_params duplicate $duplicate%"
     [ -n "$corrupt" ] && netem_params="$netem_params corrupt $corrupt%"
     [ -n "$reorder" ] && netem_params="$netem_params reorder $reorder%"
+    [ -n "$rate" ] && netem_params="$netem_params rate $rate"  # bandwidth is per direction, so it isn't halved for "both"
 
     # Apply delay to egress (outgoing) traffic on ifb1 for specific IP addresses
     delete_qdisc_if_exists "$ifb1_interface" "root" "prio 1:0"
