@@ -38,6 +38,10 @@ about() {
     echo "  --show-interfaces                               List network interfaces with their type, IPv4 address and Latency Ninja status."
     echo "  -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface."
     echo
+    echo "  --netns <name>                                  Apply/query/roll back inside a named network namespace (see 'ip netns list')."
+    echo "  --pid <pid>                                     Apply/query/roll back inside the network namespace of a process."
+    echo "  --container <name|id>                           Apply/query/roll back inside a running Docker or Podman container."
+    echo
     echo "  -i, --interface <interface>                     Desired network interface (e.g., eth0)."
     echo "  -s, --src_ip <ip,ip2,...>                       Desired source IP/Network. (default: IP of selected interface)."
     echo "  -d, --dst_ip <ip1:[prt1~],ip2:[prt1~prt2]...>   Desired destination IP(s)/Networks with optional ports. IPs can have multiple ports seperated by a ~."
@@ -90,6 +94,10 @@ usage() {
     echo "  -q, --query       Display current tc rules."
     echo "  --show-interfaces List interfaces, their type, IPv4 and Latency Ninja status."
     echo "  -r, --rollback    Rollback networking changes. (Requires -i)"
+    echo
+    echo "  --netns           Run inside a named network namespace."
+    echo "  --pid             Run inside the network namespace of a process."
+    echo "  --container       Run inside a Docker or Podman container."
     echo
     echo "  -i, --interface   Network interface (e.g., eth0)."
     echo "  -s, --src_ip      Source IP/Network (default: Interface IP)."

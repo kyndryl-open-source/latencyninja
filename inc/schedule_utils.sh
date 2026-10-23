@@ -21,7 +21,7 @@
 
 # Function to get the systemd unit name (without suffix) of an interface's timed rollback
 rollback_unit_name() {
-    echo "latencyninja-rollback-$(systemd-escape "$1")"
+    echo "latencyninja-rollback-$(systemd-escape "${LATENCYNINJA_NETNS_KEY:+$LATENCYNINJA_NETNS_KEY-}$1")"
 }
 
 # Function to schedule the rollback of an interface
@@ -29,19 +29,20 @@ schedule_rollback() {
     local interface="$1"
     local seconds="$2"
     local backup_file="$3"
-    local unit
+    local unit ns_args=()
     unit=$(rollback_unit_name "$interface")
+    in_namespace && ns_args=("$LATENCYNINJA_NETNS_OPT" "$LATENCYNINJA_NETNS_VAL")
 
     systemctl reset-failed "$unit.service" "$unit.timer" &>/dev/null
     systemd-run --quiet --unit="$unit" --on-active="${seconds}s" --timer-property=AccuracySec=1s \
         --description="Latency Ninja timed rollback for $interface" \
-        "$(command -v bash)" "$script_path" --timed-rollback "$backup_file" --interface "$interface" \
+        "$(command -v bash)" "$script_path" --timed-rollback "$backup_file" --interface "$interface" "${ns_args[@]}" \
         || die "Failed to schedule the rollback of $interface."
 
     mkdir -p "$state_dir" && chmod 700 "$state_dir"
     echo $(( $(date +%s) + seconds )) > "$state_dir/$interface.expires"
     echo "Rollback of $interface scheduled at $(date -d "+${seconds} seconds" '+%Y-%m-%d %H:%M:%S') ($unit.timer)."
-    echo "To end earlier, run: $0 --rollback --interface $interface"
+    echo "To end earlier, run: $0 --rollback --interface $interface$(namespace_hint)"
 }
 
 # Function to cancel the pending timed rollback of an interface

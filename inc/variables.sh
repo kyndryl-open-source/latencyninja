@@ -43,6 +43,9 @@ declare -g backup_dir="" log_file=""
 declare -g state_dir="/run/latencyninja" persist_dir="/etc/latencyninja/persist" unit_file="/etc/systemd/system/latencyninja@.service" udev_rule_file="/etc/udev/rules.d/99-latencyninja.rules"
 declare -g save_file="" restore_file="" apply_persisted="" persist=0 keep_persist=0
 
+# Inside a target namespace (--netns/--pid/--container), keep state separate from the host's
+[ -n "$LATENCYNINJA_NETNS_KEY" ] && state_dir="$state_dir/ns/$LATENCYNINJA_NETNS_KEY"
+
 # Profiles (built-in profiles ship with Latency Ninja; files in the user directory take precedence)
 declare -g profile="" profiles_dir="$script_dir/profiles" user_profiles_dir="/etc/latencyninja/profiles"
 

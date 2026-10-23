@@ -38,6 +38,7 @@ append_applied_values() {
     {
         echo "### Applied TC Values ###"
         echo ""
+        in_namespace && echo "Namespace: $LATENCYNINJA_NETNS_DESC"
         [ -n "$eth_interface" ] && echo "Interface: $eth_interface"
         [ -n "$direction" ] && echo "Direction: $direction"
         for sip in "${src_ip[@]}"; do

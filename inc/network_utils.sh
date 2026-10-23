@@ -20,12 +20,10 @@ is_single_host() {
     return 0
 }
 
-# Function to list network devices (skips non-device entries such as bonding_masters)
+# Function to list network devices. Uses ip rather than /sys/class/net, which keeps showing the
+# host's devices inside a namespace entered with nsenter --net.
 list_network_devices() {
-    local entry
-    for entry in /sys/class/net/*; do
-        [ -d "$entry" ] && basename "$entry"
-    done
+    $ip_path -o link show | awk -F': ' '{print $2}' | sed 's/@.*//'
 }
 
 # Function to derive the ifb names for an interface so several interfaces can be shaped at once
@@ -157,6 +155,7 @@ show_available_interfaces() {
     [ -n "$jq_cmd" ] || die "The 'jq' command is required but it's not installed."
 
     echo
+    in_namespace && echo -e "Namespace: $LATENCYNINJA_NETNS_DESC\n"
     printf "%-16s %-8s %-30s %-20s %s\n" "INTERFACE" "STATE" "TYPE" "IPV4" "LATENCY NINJA"
     # ifb devices are used internally by Latency Ninja (lni-*/lne-*) and the ifb module, so they're hidden
     # "|" rather than tabs: read collapses consecutive whitespace delimiters, which would shift empty fields

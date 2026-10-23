@@ -116,8 +116,9 @@ write_snapshot() {
     {
         echo "# Latency Ninja snapshot"
         echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "# Restore with: $script_path --restore $file"
+        echo "# Restore with: $script_path --restore $file$(namespace_hint)"
         echo "[scope $scope]"
+        in_namespace && echo "[namespace $LATENCYNINJA_NETNS_KEY]"
         for interface in $(active_interfaces); do
             [ "$scope" != "all" ] && [ "$interface" != "$scope" ] && continue
             echo "[interface $interface]"
@@ -153,7 +154,7 @@ save_snapshot() {
 restore_snapshot() {
     local file="$1"
     local only_interface="$2"
-    local scope="all" current="" line interface failed=0
+    local scope="all" current="" line interface failed=0 namespace=""
     declare -A saved=()
 
     [ -r "$file" ] || die "Snapshot file not found: $file"
@@ -163,11 +164,16 @@ restore_snapshot() {
         case "$line" in
             '#'*|'') ;;
             '[scope '*']') scope="${line#\[scope }"; scope="${scope%\]}" ;;
+            '[namespace '*']') namespace="${line#\[namespace }"; namespace="${namespace%\]}" ;;
             '[interface '*']') current="${line#\[interface }"; current="${current%\]}"; saved[$current]="" ;;
             '[end]') current="" ;;
             *) [ -n "$current" ] && saved[$current]+="$line"$'\n' ;;
         esac
     done < "$file"
+
+    if [ "$namespace" != "${LATENCYNINJA_NETNS_KEY:-}" ]; then
+        die "This snapshot was taken in ${namespace:-the host namespace}, not ${LATENCYNINJA_NETNS_KEY:-the host namespace}. Restore it with the same --netns, --pid or --container option."
+    fi
 
     [ -n "$only_interface" ] && scope="$only_interface"
     echo "Restoring snapshot $file (scope: $scope)"

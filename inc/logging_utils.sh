@@ -35,7 +35,8 @@ log_execution() {
 
     {
         echo "[$timestamp] Execution Start"
-        echo "  Command: $0 $*"
+        echo "  Command: $0 $*$(namespace_hint)"
+        in_namespace && echo "  Namespace: $LATENCYNINJA_NETNS_DESC"
         [ -n "$eth_interface" ] && echo "  Interface: $eth_interface"
         for sip in "${src_ip[@]}"; do
             [ -n "$sip" ] && echo "  Source IP: $sip"

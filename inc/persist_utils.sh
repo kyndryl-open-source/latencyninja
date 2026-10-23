@@ -24,9 +24,9 @@ persist_unit_name() {
     echo "latencyninja@$(systemd-escape "$1").service"
 }
 
-# Function to check if an interface has persisted rules
+# Function to check if an interface has persisted rules (persistence only applies to the host namespace)
 is_persisted() {
-    [ -f "$persist_dir/$1.args" ]
+    ! in_namespace && [ -f "$persist_dir/$1.args" ]
 }
 
 # Function to check that persistence can be used on this system
@@ -87,6 +87,7 @@ unpersist_rules() {
 # Function to list interfaces with persisted rules
 persisted_interfaces() {
     local file
+    in_namespace && return 0
     for file in "$persist_dir"/*.args; do
         [ -f "$file" ] && basename "$file" .args
     done
