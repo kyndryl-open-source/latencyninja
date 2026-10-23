@@ -1,6 +1,12 @@
 # Contributing to Latency Ninja
 
-## Development workflow
+## Contributing a change
+
+Pull requests are welcome! Please open them against the **open version branch** (the branch named after the next version, e.g. `1.24`) rather than `main`, and don't change `version.txt`; maintainers handle versioning and releases. If no version branch is open, target `main` and a maintainer will retarget your pull request.
+
+Please add or update tests in `tests/run_tests.sh` for new behavior (see [tests/README.md](tests/README.md)) and describe your change in the pull request. Credit is given in the CHANGELOG and the commit history.
+
+## Development workflow (maintainers)
 
 Each release is developed on a branch named after its version, then merged into `main` through a pull request.
 
@@ -28,7 +34,7 @@ Each release is developed on a branch named after its version, then merged into 
 Every pull request runs:
 
 - **Lint**: bash syntax and ShellCheck (errors).
-- **Version bump and CHANGELOG**: `version.txt` must be greater than `main`'s and documented in `CHANGELOG.md`.
+- **Version bump and CHANGELOG** (pull requests to `main` only): `version.txt` must be greater than `main`'s and documented in `CHANGELOG.md`.
 - **Functional tests**: the full `tests/run_tests.sh` suite on an Ubuntu runner.
 
 ## Releases
