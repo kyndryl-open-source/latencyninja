@@ -19,6 +19,9 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 🎯 Target Multiple Destination IP/Networks: Specify the destination IP addresses or networks.
 * 🌍 Filter by Source IP/Network: Specify the source IP address or network.
 * <span style="color:red;font-weight:bold;">{ }</span> JSON Support: Allows performing network conditions programmatically.
+* 🔗 Multiple interfaces: Shape several interfaces at once, including bonded (`bond0`) and WireGuard (`wg0`) interfaces.
+* 💾 Snapshots: Save the current rules to a file and restore them later. Every change also writes a restorable backup.
+* 📌 Persistence: Optionally re-apply rules at boot and whenever the interface is re-created (systemd).
 
 ## Table of Contents
 
@@ -96,6 +99,12 @@ Add executible permissions:
       -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
 
       --json <path/file.json>                         Path to JSON file.
+      --backup <path>                                 Directory for tc rules backup files (default: /tmp/).
+      --logging <path>                                Path for execution log file (default: /tmp/latencyninja.log).
+      --persist                                       Re-apply the rules at boot and whenever the interface is re-created (requires systemd).
+                                                      Persisted rules are removed with --rollback.
+      --save <file>                                   Save a restorable snapshot of the current rules (all interfaces, or only --interface).
+      --restore <file>                                Restore the rules from a snapshot or backup file (all interfaces in it, or only --interface).
       --update                                        Checks and updates to the latest version from Github.
 
 ## Examples
@@ -154,6 +163,37 @@ To roll back previously applied network perturbations, run:
                   --interface eth0 \
                   --rollback
 
+## Snapshots and Backups
+
+Save the rules currently applied by Latency Ninja on all interfaces (or a single one with `--interface`):
+
+      ./latencyninja --save /root/before-test.snap
+
+Restore them later. Interfaces in scope that have rules but weren't in the snapshot are rolled back, so restoring a snapshot taken before any rules were applied returns the system to a clean state:
+
+      ./latencyninja --restore /root/before-test.snap
+      ./latencyninja --restore /root/before-test.snap --interface eth0   # only eth0
+
+Every time rules are applied, a snapshot of the previous state is written to the backup directory (`--backup`, default `/tmp`). Restoring it undoes that change; the exact command is printed after each run.
+
+Snapshots are plain text with one argument per line and are never executed by a shell.
+
+## Persistence
+
+By default rules are lost at reboot or when an interface is re-created. Add `--persist` to keep them:
+
+      ./latencyninja --interface wg0 --dst_ip 10.30.0.2 --latency 50 --persist
+
+The configuration is saved in `/etc/latencyninja/persist/` and a udev rule starts `latencyninja@<interface>.service` each time the interface appears: at boot, and whenever it is re-created (e.g. `wg-quick down/up`, NetworkManager re-creating a bond). Rules already survive a plain link down/up. The unit runs Latency Ninja from its current location, so re-run with `--persist` if you move it.
+
+`--query` lists persisted interfaces, applying new rules with `--persist` replaces the persisted ones, and `--rollback --interface <interface>` removes them.
+
+## Bonded and WireGuard Interfaces
+
+Rules can be applied to bonded and WireGuard interfaces like any other interface. On a bond, rules keep working through slave failover. On a WireGuard interface, rules apply to the traffic inside the tunnel; to affect the encrypted traffic, apply rules to the underlying interface with the peer's endpoint as `--dst_ip`.
+
+Each interface uses its own pair of `ifb` devices (`lni-<interface>` for ingress and `lne-<interface>` for egress), so several interfaces can be shaped at the same time.
+
 ## Updating
 
 To update Latency Ninja to the lastest version, run:
@@ -161,7 +201,7 @@ To update Latency Ninja to the lastest version, run:
     ./latencyninja --update
 
 ## Warning
-- Any changes made by Latency Ninja will not persist after a reboot or a network restart (yet)
+- Changes made by Latency Ninja do not persist after a reboot or when an interface is re-created unless `--persist` is used.
 
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
@@ -169,11 +209,10 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- Persist network perturbations policies after network interface restart and reboots.
 - Schedule rollbacks.
 
 ## Contributing
-We welcome contributions! If you'd like to contribute, please create a pull request with your changes.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, tests and release process.
 
 ## License
 This project is licensed under the GNU General Public License v2.0. Please refer to the LICENSE file for more details.

@@ -20,6 +20,31 @@ is_single_host() {
     return 0
 }
 
+# Function to list network devices (skips non-device entries such as bonding_masters)
+list_network_devices() {
+    local entry
+    for entry in /sys/class/net/*; do
+        [ -d "$entry" ] && basename "$entry"
+    done
+}
+
+# Function to derive the ifb names for an interface so several interfaces can be shaped at once
+set_ifb_interfaces() {
+    local interface="$1"
+    ifb0_interface=$(ifb_name_for "lni-" "$interface")
+    ifb1_interface=$(ifb_name_for "lne-" "$interface")
+}
+
+# Function to build an ifb name; names are limited to 15 characters so long ones use a checksum
+ifb_name_for() {
+    local prefix="$1" interface="$2"
+    local name="${prefix}${interface}"
+    if [ "${#name}" -gt 15 ]; then
+        name="${prefix}$(printf '%s' "$interface" | cksum | awk '{print substr($1, 1, 11)}')"
+    fi
+    echo "$name"
+}
+
 # Function to create virtual interfaces
 create_virtual_interface() {
     local interface="$1"
