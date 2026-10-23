@@ -125,3 +125,55 @@ rollback_everything() {
         rollback_done=1
     fi
 }
+
+# Function to describe the Latency Ninja state of an interface (rules, persistence, timed rollback)
+interface_ninja_status() {
+    local interface="$1" ip_cmd="$2"
+    local status="" directions="" expires left
+
+    $ip_cmd link show "$(ifb_name_for "lni-" "$interface")" &>/dev/null && directions="ingress"
+    if $ip_cmd link show "$(ifb_name_for "lne-" "$interface")" &>/dev/null; then
+        [ -n "$directions" ] && directions="both" || directions="egress"
+    fi
+    [ -n "$directions" ] && status="rules ($directions)"
+    is_persisted "$interface" && status="${status:+$status, }persisted"
+    expires="$state_dir/$interface.expires"
+    if [ -r "$expires" ]; then
+        left=$(( $(cat "$expires") - $(date +%s) ))
+        [ "$left" -gt 0 ] && status="${status:+$status, }rollback in $((left / 60))m $((left % 60))s"
+    fi
+    echo "${status:--}"
+}
+
+# Function to display the network interfaces that rules can be applied to.
+# Works without root; persistence and timed rollbacks are only visible to root.
+# Based on a contribution by Stan Cope (@scopey).
+show_available_interfaces() {
+    local ip_cmd="${ip_path:-$(command -v ip)}"
+    local jq_cmd="${jq_path:-$(command -v jq)}"
+    local name state kind slave master link_type address type
+
+    [ -n "$ip_cmd" ] || die "The 'ip' command is required but it's not installed."
+    [ -n "$jq_cmd" ] || die "The 'jq' command is required but it's not installed."
+
+    echo
+    printf "%-16s %-8s %-30s %-20s %s\n" "INTERFACE" "STATE" "TYPE" "IPV4" "LATENCY NINJA"
+    # ifb devices are used internally by Latency Ninja (lni-*/lne-*) and the ifb module, so they're hidden
+    # "|" rather than tabs: read collapses consecutive whitespace delimiters, which would shift empty fields
+    while IFS='|' read -r name state kind slave master link_type; do
+        [ "$link_type" = "loopback" ] || [ "$kind" = "ifb" ] && continue
+        case "$kind" in
+            "") [ "$link_type" = "ether" ] && type="ethernet" || type="$link_type" ;;
+            *) type="$kind" ;;
+        esac
+        [ -n "$master" ] && type="$type ($slave member of $master)"
+        address=$($ip_cmd -j -4 address show dev "$name" 2>/dev/null | $jq_cmd -r '[.[].addr_info[] | "\(.local)/\(.prefixlen)"] | first // "-"')
+        printf "%-16s %-8s %-30s %-20s %s\n" "$name" "$state" "$type" "${address:--}" "$(interface_ninja_status "$name" "$ip_cmd")"
+    done < <($ip_cmd -j -d link show | $jq_cmd -r '.[] | [.ifname, .operstate, (.linkinfo.info_kind // ""), (.linkinfo.info_slave_kind // ""), (.master // ""), .link_type] | join("|")')
+
+    if [ "$(id -u)" -ne 0 ]; then
+        echo
+        echo "Run as root to also see persisted rules and timed rollbacks."
+    fi
+    echo
+}

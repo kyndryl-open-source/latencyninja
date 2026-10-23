@@ -1,3 +1,9 @@
+CHANGELOG 1.24
+- Added --show-interfaces to list interfaces with their type (ethernet, bond, WireGuard, ...), IPv4 address and Latency Ninja status (rules, persistence, timed rollback); works without root. Based on a contribution by @scopey (#46)
+- README lists the required packages per distribution (contributed by @scopey in #46) and notes that git is only needed for --update
+- Contributions now target the open version branch; CONTRIBUTING.md and the PR template explain the workflow
+- Fixed intermittent bond test failures: the test topology now waits for udev before enslaving veths, so slave MAC addresses match the bond
+
 CHANGELOG 1.23
 - Starting with v1.23, I've started using Claude (Anthropic's AI assistant) to help develop Latency Ninja
 - Added --duration (-t) to roll back automatically after a time (e.g. 30s, 10m, 2h), restoring the rules that were in place before; --query shows pending rollbacks
