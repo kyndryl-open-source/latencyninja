@@ -222,7 +222,7 @@ To roll back previously applied network perturbations, run:
                   --interface eth0 \
                   --rollback
 
-Optional JSON keys: `rate`, `profile` (explicit values in the file take precedence over the profile) and `duration`.
+Every option that applies rules is supported, including `persist` (`true`/`false`), `backup`, `logging` and the target (`container`, `netns` or `pid`). `src_ip` and `dst_ip` can also be arrays, numbers can be written without quotes, and unknown keys are rejected. See [USAGE.md](USAGE.md#json-files) for the full list.
 
 ## Bandwidth Limits
 
@@ -293,7 +293,7 @@ Add `--container <name|id>` (Docker or Podman), `--netns <name>` or `--pid <pid>
       sudo ./latencyninja --container payments-api --interface eth0 --dst_ip 10.88.0.1 --latency 150
       sudo ./latencyninja --container payments-api --rollback --interface eth0
 
-State, snapshots and timed rollbacks are kept per namespace. `--persist` isn't available inside namespaces, because a container's network namespace is replaced when it restarts. See [USAGE.md](USAGE.md#containers-and-network-namespaces) for details.
+`--persist` works too: rules are re-applied whenever the container restarts or the namespace is re-created. JSON files can name the target (`"container"`, `"netns"` or `"pid"`), and host snapshots include every container and namespace. See [USAGE.md](USAGE.md#containers-and-network-namespaces) for details.
 
 ## Bonded and WireGuard Interfaces
 
@@ -316,11 +316,12 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- Safety and automation: `--dry-run`, SSH lockout guard, JSON output for `--query` and `--show-interfaces`.
-- IPv6 support and protocol/port-range filtering.
-- Asymmetric per-direction values, burst loss and blackhole mode.
-- Different conditions per destination on one interface (region matrices) and multi-step scenarios.
-- Packaging (`make install`, .deb/.rpm), man page and bash completion.
+- **1.27** Safety and automation: `--dry-run`, SSH lockout guard, JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
+- **1.28** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic.
+- **1.29** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`.
+- **1.30** Different conditions per destination on one interface and region matrices (`--matrix regions.json`).
+- **1.31** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows).
+- **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions, Kubernetes pod targeting.
 
 ## Contributing
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, tests and release process.

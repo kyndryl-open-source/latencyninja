@@ -197,31 +197,46 @@ Create your own profile as a JSON file in `/etc/latencyninja/profiles/` (the fil
     EOF
     sudo ./latencyninja -i eth0 -d 10.0.0.0/8 --profile branch-office
 
-A custom profile with the same name as a built-in one replaces it. Snapshots and persisted rules store the resolved values, so editing a profile later doesn't change rules that were saved with it.
+A custom profile with the same name as a built-in one replaces it. Unknown keys in a profile are rejected, so a typo doesn't silently drop a value. Snapshots and persisted rules store the resolved values, so editing a profile later doesn't change rules that were saved with it.
 
 ## JSON files
 
-The rule options can come from a JSON file (`--persist`, `--backup`, `--logging` and the namespace options stay on the command line):
+Every option that applies rules can come from a JSON file, including the target container or namespace, persistence, and the backup and log locations:
 
     {
+        "container": "payments-api",
         "interface": "eth0",
-        "src_ip": "192.168.100.10",
-        "dst_ip": "192.168.100.123:80~443,10.20.0.0/16",
+        "dst_ip": ["10.88.0.1", "10.20.0.0/16:80~443"],
         "direction": "both",
-        "latency": "30",
-        "jitter": "5",
-        "packet_loss": "0.5",
-        "duplicate": "1",
-        "corrupt": "0.1",
-        "reorder": "2",
-        "rate": "10mbit",
         "profile": "4g",
-        "duration": "15m"
+        "latency": 150,
+        "packet_loss": "0.5",
+        "persist": true,
+        "logging": "/var/log/latencyninja.log"
     }
 
     sudo ./latencyninja --json experiment.json
 
-Every key is optional, as long as the interface and a destination or source are given in the file or on the command line. Values in the file override the same options given on the command line, and the profile named in the file only fills in values that aren't set.
+| Key | Value | Same as |
+|---|---|---|
+| `interface` | string | `--interface` |
+| `src_ip`, `dst_ip` | string (comma-separated) or array of strings | `--src_ip`, `--dst_ip` |
+| `direction` | `"ingress"`, `"egress"` or `"both"` | `--direction` |
+| `latency`, `jitter` | number or string (ms) | `--latency`, `--jitter` |
+| `packet_loss`, `duplicate`, `corrupt`, `reorder` | number or string (%) | `--packet_loss`, `--duplicate`, `--corrupt`, `--reorder` |
+| `rate` | string with unit, e.g. `"2mbit"` | `--rate` |
+| `profile` | profile name | `--profile` |
+| `duration` | string, e.g. `"15m"`, or number of seconds | `--duration` |
+| `persist` | `true` or `false` | `--persist` |
+| `backup`, `logging` | path | `--backup`, `--logging` |
+| `container`, `netns`, `pid` | name, name or process ID (only one of them) | `--container`, `--netns`, `--pid` |
+
+Rules:
+
+- Every key is optional, as long as the interface and a destination or source are given in the file or on the command line.
+- Values in the file override the same options given on the command line. The exception is the target: giving a container, namespace or process both in the file and on the command line is an error.
+- A profile named in the file only fills in values that aren't set.
+- Unknown keys (e.g. a typo like `latncy`), values of the wrong type and invalid JSON are rejected before anything is applied.
 
 ## Checking what is applied
 
@@ -278,9 +293,15 @@ Save the current Latency Ninja rules of all interfaces to a file:
     Snapshot saved to: /root/before-experiment.snap
     Interfaces with rules: eth0 bond0
 
-Save only one interface:
+On the host, a snapshot of everything also includes the rules of every container and namespace, and restoring it re-enters each one (containers by name, so they can have been restarted in between):
+
+    Snapshot saved to: /root/before-experiment.snap
+    Interfaces with rules: eth0 bond0 eth0@container:payments-api lnpeer0@netns:blue
+
+Save only one interface (of the host, or of a container with `--container`):
 
     sudo ./latencyninja --save /root/eth0.snap --interface eth0
+    sudo ./latencyninja --container payments-api --save /root/payments.snap
 
 Restore a snapshot. Interfaces in scope that have rules but weren't in the snapshot are rolled back, so restoring a snapshot taken with no rules returns everything to a clean state:
 
@@ -308,7 +329,20 @@ The rules are re-applied at boot and whenever the interface appears again, for e
 - `--rollback --interface eth0` removes the persisted rules too.
 - `--query` lists persisted interfaces; `--show-interfaces` marks them.
 
-Persistence uses a udev rule and a systemd unit that run Latency Ninja from its current location, so re-run with `--persist` if you move it. It requires systemd and isn't available inside containers or namespaces.
+Persistence uses a udev rule and a systemd unit that run Latency Ninja from its current location, so re-run with `--persist` if you move it. It requires systemd.
+
+### Persistence in containers and namespaces
+
+`--persist` also works with `--container` and `--netns`:
+
+    sudo ./latencyninja --container payments-api -i eth0 -d 10.88.0.1 --latency 150 --persist
+    sudo ./latencyninja --netns blue -i veth-blue -d 10.0.0.1 --rate 2mbit --persist
+
+The rules are re-applied whenever the container restarts (including after a reboot, when it is started again) or the namespace or interface is re-created. Containers are tracked by name, so this also covers containers re-created with the same name, e.g. by `docker compose down && docker compose up`. A background service, `latencyninja-namespaces.service`, checks every few seconds; it runs only while some container or namespace has persisted rules.
+
+Like on the host, rules you remove or change in a running container (with `--rollback --keep-persist`, `--restore` or new rules without `--persist`) aren't overridden until it restarts. `--rollback` removes the persisted rules.
+
+Processes (`--pid`) can't have persisted rules, because a process doesn't survive a restart; use `--container` or `--netns` instead. Persisted rules of containers and namespaces appear in `--query` on the host as `<interface>@container:<name>` or `<interface>@netns:<name>`.
 
 ## Several interfaces at once
 
@@ -363,8 +397,9 @@ The namespace option works with every other option:
 
 Notes:
 
-- State, snapshots and timed rollbacks are kept per namespace. A snapshot taken in a container must be restored with the same `--container` option.
-- `--persist` isn't supported: a container's network namespace is replaced when it restarts, and rules disappear with it.
+- State and timed rollbacks are kept per network namespace, even if it is reached in different ways (e.g. `--container` and `--pid` of a process inside it). A target that turns out to be the host's own namespace (e.g. `--pid` of a host process) is treated as the host.
+- A snapshot taken with `--container` (or `--netns`, `--pid`) contains only that container and must be restored with the same option. A snapshot taken on the host without these options includes all containers and namespaces; see [Snapshots and backups](#snapshots-and-backups).
+- `--persist` works with `--container` and `--netns`; see [Persistence in containers and namespaces](#persistence-in-containers-and-namespaces).
 - To find what to target, `--show-interfaces` inside the container shows its interfaces and addresses. The container's gateway (e.g. `10.88.0.1` for Podman, `172.17.0.1` for Docker) is the destination for traffic between the container and the host or the outside world.
 
 ## Logs, backups and debugging
