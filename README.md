@@ -25,6 +25,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 📶 Bandwidth: Limit throughput per direction to emulate slow links.
 * 🗂️ Profiles: Ready-made network profiles (3G, 4G, 5G, satellite, cross-region links, lossy Wi-Fi) and your own.
 * ⏲️ Timed rollback: Automatically restore the previous rules after a duration.
+* 📦 Containers: Target a single Docker or Podman container, a network namespace or a process instead of the whole host.
 
 ## Table of Contents
 
@@ -57,7 +58,7 @@ Latency Ninja is compatible with Red Hat/CentOS/Fedora/Debian/Ubuntu Linux-based
 
 Clone this repository:
 
-      git clone https://github.com/haythamelkhoja/latencyninja
+      git clone https://github.com/kyndryl-open-source/latencyninja
 
 Browse to directory:
 
@@ -67,23 +68,31 @@ Add executible permissions:
 
       chmod +x ./latencyninja
   
- ## Usage
-          
-      ./latencyninja --interface <interface> 
-                     --dst_ip <destination IP/Network:port~port~port> 
-                     [--src_ip <source IP/network>] 
+## Usage
+
+See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
+
+      ./latencyninja [--container <name> | --netns <name> | --pid <pid>]
+                     --interface <interface>
+                     --dst_ip <destination IP/Network:port~port~port>
+                     [--src_ip <source IP/network>]
                      [--direction <direction>]
-                     [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>]
+                     [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]
+                     [--profile <name>] [--duration <time>] [--persist]
 
       Options:
 
-      -h, --help                                      Display thelp message.
+      -h, --help                                      Display the help message.
       -a, --about                                     Display about message.
       -v, --version                                   Display current version.
 
       -q, --query                                     Display current tc rules applied.
       --show-interfaces                               List network interfaces with their type, IPv4 address and Latency Ninja status.
       -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface.
+
+      --container <name|id>                           Apply/query/roll back inside a running Docker or Podman container.
+      --netns <name>                                  Apply/query/roll back inside a named network namespace (see 'ip netns list').
+      --pid <pid>                                     Apply/query/roll back inside the network namespace of a process.
 
       -i, --interface <interface>                     Desired network interface (e.g., eth0).
       -s, --src_ip <ip,ip2,...>                       Desired source IP/Network. (default: IP of selected interface).
@@ -120,28 +129,60 @@ Add executible permissions:
 
 ## Examples
 
-      ./latencyninja \ 
-                  --interface eth0 \
-                  --dst_ip 192.168.100.123 \
-                  --latency 5 
+More examples, with explanations, are in [USAGE.md](USAGE.md).
 
-      ./latencyninja \ 
-                  --interface eth0 \
-                  --dst_ip 192.168.100.123:80~443 \
-                  --latency 5 --jitter 0.1 \
-                  --direction ingress
+Add 50 ms of latency to all traffic with one host:
 
-      ./latencyninja \ 
-                  --interface eth0 \
-                  --dst_ip 192.168.100.0/24:80~443,192.168.120.2:8080~9090 \
-                  --latency 5 --jitter 0.1 --packet-loss 0.5 --duplicate 0.1
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --latency 50
 
-      ./latencyninja \
-                  --interface eth0 \
-                  --src_ip 192.168.100.123 \
-                  --dst_ip 192.168.100.121 \
-                  --latency 5 --jitter 0.2 
-                  --direction egress
+Latency with jitter on two ports of a host, incoming traffic only:
+
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123:80~443 \
+                          --latency 100 --jitter 10 --direction ingress
+
+Several destinations and subnets with loss and duplication:
+
+      sudo ./latencyninja --interface eth0 \
+                          --dst_ip 192.168.100.0/24:80~443,192.168.120.2:8080~9090 \
+                          --latency 5 --jitter 0.1 --packet_loss 0.5 --duplicate 0.1
+
+Only traffic from one local address, outgoing only:
+
+      sudo ./latencyninja --interface eth0 --src_ip 192.168.100.123 --dst_ip 192.168.100.121 \
+                          --latency 5 --jitter 0.2 --direction egress
+
+Limit bandwidth to 2 Mbit/s:
+
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --rate 2mbit
+
+Emulate a 4G connection, or 4G with more latency:
+
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g --latency 150
+
+Make a dependency unreachable for 2 minutes, then restore automatically:
+
+      sudo ./latencyninja --interface eth0 --dst_ip 10.0.5.20 --packet_loss 100 --duration 2m
+
+Keep cross-region latency to a database network across reboots:
+
+      sudo ./latencyninja --interface eth0 --dst_ip 10.50.0.0/16:5432 --profile transatlantic --persist
+
+Slow down a single container for 15 minutes:
+
+      sudo ./latencyninja --container checkout --interface eth0 --dst_ip 172.17.0.0/16 \
+                          --latency 250 --jitter 50 --duration 15m
+
+Save the current rules, experiment, and put everything back:
+
+      sudo ./latencyninja --save /root/before.snap
+      sudo ./latencyninja --interface bond0 --dst_ip 10.40.0.0/24 --profile satellite
+      sudo ./latencyninja --restore /root/before.snap
+
+List interfaces and check what is applied:
+
+      ./latencyninja --show-interfaces
+      sudo ./latencyninja --query
 
 To use a JSON file using the --json option, run:
 
@@ -244,6 +285,16 @@ The configuration is saved in `/etc/latencyninja/persist/` and a udev rule start
 
 `--query` lists persisted interfaces, applying new rules with `--persist` replaces the persisted ones, and `--rollback --interface <interface>` removes them.
 
+## Containers and Network Namespaces
+
+Add `--container <name|id>` (Docker or Podman), `--netns <name>` or `--pid <pid>` to any command to work inside that network namespace instead of the host. Only that container's or namespace's traffic is affected:
+
+      sudo ./latencyninja --container payments-api --show-interfaces
+      sudo ./latencyninja --container payments-api --interface eth0 --dst_ip 10.88.0.1 --latency 150
+      sudo ./latencyninja --container payments-api --rollback --interface eth0
+
+State, snapshots and timed rollbacks are kept per namespace. `--persist` isn't available inside namespaces, because a container's network namespace is replaced when it restarts. See [USAGE.md](USAGE.md#containers-and-network-namespaces) for details.
+
 ## Bonded and WireGuard Interfaces
 
 Rules can be applied to bonded and WireGuard interfaces like any other interface. On a bond, rules keep working through slave failover. On a WireGuard interface, rules apply to the traffic inside the tunnel; to affect the encrypted traffic, apply rules to the underlying interface with the peer's endpoint as `--dst_ip`.
@@ -265,8 +316,11 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- Target containers and network namespaces (Docker, Podman, `--netns`, `--pid`).
-- IPv6 support.
+- Safety and automation: `--dry-run`, SSH lockout guard, JSON output for `--query` and `--show-interfaces`.
+- IPv6 support and protocol/port-range filtering.
+- Asymmetric per-direction values, burst loss and blackhole mode.
+- Different conditions per destination on one interface (region matrices) and multi-step scenarios.
+- Packaging (`make install`, .deb/.rpm), man page and bash completion.
 
 ## Contributing
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, tests and release process.
