@@ -208,7 +208,7 @@ Make sure the JSON file is formated using the following template:
             "duration": "15m"
       }
 
-To list the interfaces you can apply rules to, with their type (ethernet, bond, WireGuard, ...), IPv4 address and whether Latency Ninja rules, persistence or a timed rollback are active, run (it also works without `sudo`, but then doesn't show persistence and timed rollbacks):
+To list the interfaces you can apply rules to, with their type (ethernet, bond, WireGuard, ...), IPv4 address and whether Latency Ninja rules, persistence or a timed rollback are active, run:
 
       sudo ./latencyninja --show-interfaces
 

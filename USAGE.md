@@ -28,7 +28,7 @@ Detailed examples of every Latency Ninja feature. For installation and an overvi
 
 ## Basics
 
-Latency Ninja must run as root (`--show-interfaces` is the only exception). It can be run from any directory:
+Latency Ninja must run as root, so every command uses `sudo`. It can be run from any directory:
 
     sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --latency 50
     sudo /opt/latencyninja/latencyninja -i eth0 -d 192.168.100.123 -l 50      # same, short options
@@ -63,7 +63,7 @@ Applying new rules to an interface replaces the rules already on it. Each run pr
 
 ## Finding the right interface
 
-List the interfaces rules can be applied to, with their type, IPv4 address and current Latency Ninja state. It also works without `sudo`, but then doesn't show persistence and timed rollbacks:
+List the interfaces rules can be applied to, with their type, IPv4 address and current Latency Ninja state (rules, persistence, timed rollback):
 
     sudo ./latencyninja --show-interfaces
 
@@ -452,7 +452,7 @@ The updater compares your version with the latest release on GitHub and, if you 
 
 ## Troubleshooting
 
-- **"This script must be run as root"**: use `sudo`. Only `--show-interfaces` works without root.
+- **"This script must be run as root"**: every command, including `--show-interfaces` and `--query`, needs `sudo`.
 - **"Invalid interface"**: check the name with `--show-interfaces` (or inside the container with `--container <name> --show-interfaces`).
 - **"Interface ... has no IPv4 address"**: bond members and some tunnel interfaces have no address; target the bond or the interface that has one, or give both `--src_ip` and `--dst_ip`.
 - **Nothing seems to happen**: check that the destination matches the traffic (`--query` shows the filters), and that ports are the remote side's ports.

@@ -144,7 +144,6 @@ interface_ninja_status() {
 }
 
 # Function to display the network interfaces that rules can be applied to.
-# Works without root; persistence and timed rollbacks are only visible to root.
 # Based on a contribution by Stan Cope (@scopey).
 show_available_interfaces() {
     local ip_cmd="${ip_path:-$(command -v ip)}"
@@ -169,10 +168,5 @@ show_available_interfaces() {
         address=$($ip_cmd -j -4 address show dev "$name" 2>/dev/null | $jq_cmd -r '[.[].addr_info[] | "\(.local)/\(.prefixlen)"] | first // "-"')
         printf "%-16s %-8s %-30s %-20s %s\n" "$name" "$state" "$type" "${address:--}" "$(interface_ninja_status "$name" "$ip_cmd")"
     done < <($ip_cmd -j -d link show | $jq_cmd -r '.[] | [.ifname, .operstate, (.linkinfo.info_kind // ""), (.linkinfo.info_slave_kind // ""), (.master // ""), .link_type] | join("|")')
-
-    if [ "$(id -u)" -ne 0 ]; then
-        echo
-        echo "Run as root to also see persisted rules and timed rollbacks."
-    fi
     echo
 }

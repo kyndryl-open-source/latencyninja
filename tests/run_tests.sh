@@ -843,13 +843,11 @@ test_show_interfaces() {
     check "loopback hidden" not_contains "$out" "loopback"
 }
 
-test_show_interfaces_non_root() {
+test_show_interfaces_requires_root() {
     [ -z "${SUDO_USER:-}" ] && return 77
-    ln --interface bond0 --dst_ip 10.40.0.2 --latency 10 --persist
     out=$(cd "$repo_dir" && sudo -u "$SUDO_USER" ./latencyninja --show-interfaces </dev/null 2>&1); rc=$?
-    check "works without root (exit $rc)" [ "$rc" -eq 0 ]
-    check "rules visible without root" contains "$(grep '^bond0 ' <<< "$out")" "rules (both)"
-    check "notes root is needed for persistence" contains "$out" "Run as root"
+    check "non-root is rejected (exit $rc)" [ "$rc" -ne 0 ]
+    check "explains root is required" contains "$out" "must be run as root"
 }
 
 # ---------- tests: namespaces and containers ----------
@@ -1163,7 +1161,7 @@ for t in \
     rate_egress rate_ingress rate_both_directions rate_port_and_units rate_validation \
     profile_apply profile_override profile_list_and_errors profile_custom profile_saved_as_values profile_and_rate_json \
     duration_expires_to_clean duration_restores_previous duration_cancelled duration_multi_interface duration_validation \
-    show_interfaces show_interfaces_non_root \
+    show_interfaces show_interfaces_requires_root \
     netns_apply netns_isolation netns_timed_rollback netns_snapshot pid_target namespace_errors container_target \
     json_every_option json_persist_and_profile json_namespaces json_errors profile_unknown_key \
     persist_netns persist_container snapshot_all_namespaces namespace_aliases \
