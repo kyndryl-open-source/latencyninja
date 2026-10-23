@@ -37,6 +37,9 @@ load_profile() {
 
     file=$(profile_file "$name") || die "Unknown profile: $name. Use --profiles to list the available profiles."
     $jq_path -e 'type == "object"' "$file" &>/dev/null || die "Invalid profile file: $file"
+    local unknown
+    unknown=$($jq_path -r 'keys - ["description", "latency", "jitter", "packet_loss", "duplicate", "corrupt", "reorder", "rate"] | join(", ")' "$file")
+    [ -n "$unknown" ] && die "Unknown key(s) in profile $file: $unknown. Valid keys: description latency jitter packet_loss duplicate corrupt reorder rate"
 
     for key in latency jitter packet_loss duplicate corrupt reorder rate; do
         value=$($jq_path -r --arg k "$key" '.[$k] // empty' "$file")

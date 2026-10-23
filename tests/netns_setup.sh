@@ -16,7 +16,7 @@
 # Uses nsenter rather than "ip -n"/"ip netns exec", which remount /sys and are denied by SELinux
 # when run from a systemd service (reboot test on Fedora).
 #
-# Usage: sudo tests/netns_setup.sh up|down|wg-recreate|bond-recreate
+# Usage: sudo tests/netns_setup.sh up|down|wg-recreate|bond-recreate|veth-recreate
 
 set -euo pipefail
 
@@ -36,6 +36,19 @@ wg_up() {
         peer "$(cat "$key_dir/b.pub")" endpoint 10.10.0.2:51821 allowed-ips 10.30.0.2/32
     ip addr add 10.30.0.1/24 dev wg0
     ip link set wg0 up
+}
+
+# Create the plain veth pair ln0 <-> lnpeer0
+veth_up() {
+    ip link add "$dev" type veth peer name "$peer_dev"
+    ip link set "$peer_dev" netns "$ns"
+    ip addr add 10.10.0.1/24 dev "$dev"
+    ip link set "$dev" up
+    for a in 10.10.0.2 10.10.0.3 10.10.0.4 10.20.0.1; do
+        nsenter --net="/run/netns/$ns" ip addr add "$a/24" dev "$peer_dev"
+    done
+    nsenter --net="/run/netns/$ns" ip link set "$peer_dev" up
+    ip route replace 10.20.0.0/24 via 10.10.0.2 dev "$dev"
 }
 
 bond_down() { for d in bond0 lnb0 lnb1; do ip link delete "$d" 2>/dev/null || true; done; }
@@ -76,16 +89,7 @@ up() {
     ip netns add "$ns"
     nsenter --net="/run/netns/$ns" ip link set lo up
 
-    # Plain veth pair
-    ip link add "$dev" type veth peer name "$peer_dev"
-    ip link set "$peer_dev" netns "$ns"
-    ip addr add 10.10.0.1/24 dev "$dev"
-    ip link set "$dev" up
-    for a in 10.10.0.2 10.10.0.3 10.10.0.4 10.20.0.1; do
-        nsenter --net="/run/netns/$ns" ip addr add "$a/24" dev "$peer_dev"
-    done
-    nsenter --net="/run/netns/$ns" ip link set "$peer_dev" up
-    ip route replace 10.20.0.0/24 via 10.10.0.2 dev "$dev"
+    veth_up
 
     # Bond (root ns) <-> bridge (peer ns)
     nsenter --net="/run/netns/$ns" ip link add lnbr0 type bridge
@@ -114,5 +118,6 @@ case "${1:-}" in
     down) down ;;
     wg-recreate) wg_down; wg_up ;;
     bond-recreate) bond_down; bond_up ;;
-    *) echo "Usage: $0 up|down|wg-recreate|bond-recreate"; exit 1 ;;
+    veth-recreate) ip link delete "$dev" 2>/dev/null; veth_up ;;
+    *) echo "Usage: $0 up|down|wg-recreate|bond-recreate|veth-recreate"; exit 1 ;;
 esac

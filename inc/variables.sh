@@ -26,7 +26,7 @@ declare -g ifb0_interface="" ifb1_interface="" eth_interface=""
 declare -g local_ip="" src_ip=() dst_ip=() src_ip_arg="" dst_ip_arg=""
 
 # JSON File
-declare -g json_file="" json_interface="" json_src_ip="" json_dst_ip="" json_latency="" json_jitter="" json_packet_loss="" json_duplicate="" json_corrupt="" json_reorder=""
+declare -g json_file=""
 
 # Network perturbation earameters
 declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder="" rate=""
@@ -40,7 +40,7 @@ declare -g rollback_required=0 rollback_done=0 ips_swapped=0  # Flags for script
 declare -g backup_dir="" log_file=""
 
 # Snapshots and Persistence
-declare -g state_dir="/run/latencyninja" persist_dir="/etc/latencyninja/persist" unit_file="/etc/systemd/system/latencyninja@.service" udev_rule_file="/etc/udev/rules.d/99-latencyninja.rules"
+declare -g state_root="/run/latencyninja" state_dir="/run/latencyninja" persist_dir="/etc/latencyninja/persist" unit_file="/etc/systemd/system/latencyninja@.service" udev_rule_file="/etc/udev/rules.d/99-latencyninja.rules" watcher_unit_file="/etc/systemd/system/latencyninja-namespaces.service"
 declare -g save_file="" restore_file="" apply_persisted="" persist=0 keep_persist=0
 
 # Inside a target namespace (--netns/--pid/--container), keep state separate from the host's

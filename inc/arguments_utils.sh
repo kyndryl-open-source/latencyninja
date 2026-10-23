@@ -49,6 +49,7 @@ get_arguments() {
             --persist) persist=1; shift ;;
             --apply-persisted) process_arg apply_persisted "" "$@"; shift 2 ;;
             --keep-persist) keep_persist=1; shift ;;
+            --watch-namespaces) watch_namespaces; exit 0 ;;
             --update) update; exit 0 ;;
             --debug) debug=true; shift ;;
             *) echo "Invalid option: $1"; exit 1 ;;
@@ -78,47 +79,8 @@ process_arg() {
 
 # Function to parse arguments
 parse_arguments() {
-    # If a JSON file is provided, parse the arguments from the JSON file
-    if [ ! -z "$json_file" ]; then
-        json_interface=$($jq_path -r '.interface // empty' "$json_file")
-        [ ! -z "$json_interface" ] && eth_interface="$json_interface"
-
-        json_src_ip=$($jq_path -r '.src_ip // empty' "$json_file")
-        [ ! -z "$json_src_ip" ] && validate_src_ip "$json_src_ip"
-
-        json_dst_ip=$($jq_path -r '.dst_ip // empty' "$json_file")
-        [ ! -z "$json_dst_ip" ] && validate_dst_ip "$json_dst_ip"
-
-        json_direction=$($jq_path -r '.direction // empty' "$json_file")
-        [ ! -z "$json_direction" ] && direction="$json_direction"
-
-        json_latency=$($jq_path -r '.latency // empty' "$json_file")
-        [ ! -z "$json_latency" ] && latency="$json_latency"
-
-        json_jitter=$($jq_path -r '.jitter // empty' "$json_file")
-        [ ! -z "$json_jitter" ] && jitter="$json_jitter"
-
-        json_duplicate=$($jq_path -r '.duplicate // empty' "$json_file")
-        [ ! -z "$json_duplicate" ] && duplicate="$json_duplicate"
-
-        json_corrupt=$($jq_path -r '.corrupt // empty' "$json_file")
-        [ ! -z "$json_corrupt" ] && corrupt="$json_corrupt"
-
-        json_reorder=$($jq_path -r '.reorder // empty' "$json_file")
-        [ ! -z "$json_reorder" ] && reorder="$json_reorder"
-
-        json_packet_loss=$($jq_path -r '.packet_loss // empty' "$json_file")
-        [ ! -z "$json_packet_loss" ] && packet_loss="$json_packet_loss"
-
-        json_rate=$($jq_path -r '.rate // empty' "$json_file")
-        [ ! -z "$json_rate" ] && rate="$json_rate"
-
-        json_profile=$($jq_path -r '.profile // empty' "$json_file")
-        [ ! -z "$json_profile" ] && profile="$json_profile"
-
-        json_duration=$($jq_path -r '.duration // empty' "$json_file")
-        [ ! -z "$json_duration" ] && duration="$json_duration"
-    fi
+    # Options from the JSON file override the same options given on the command line
+    [ -n "$json_file" ] && load_json_file "$json_file"
 
     # Fill in parameters that weren't given explicitly from the selected profile
     [ -n "$profile" ] && load_profile "$profile"
@@ -155,10 +117,7 @@ parse_arguments() {
         exit 0
     fi
 
-    if [ "$persist" -eq 1 ]; then
-        in_namespace && die "The --persist option isn't supported with --netns, --pid or --container: the namespace doesn't survive reboots or container restarts."
-        check_persist_supported
-    fi
+    [ "$persist" -eq 1 ] && check_persist_supported
     if [ -n "$duration" ]; then
         [ "$persist" -eq 1 ] && die "The --duration option cannot be combined with --persist."
         command -v systemd-run &>/dev/null && [ -d /run/systemd/system ] || die "The --duration option requires systemd."
@@ -350,8 +309,8 @@ display_params() {
 
     if [ "$stage" = "Applied" ]; then
         echo
-        echo "To validate, run: $0 --query$(namespace_hint)"
-        echo "To rollback, run: $0 --rollback --interface $eth_interface$(namespace_hint)"
+        echo "To validate, run: sudo $0 --query$(namespace_hint)"
+        echo "To rollback, run: sudo $0 --rollback --interface $eth_interface$(namespace_hint)"
     fi
     echo 
 }

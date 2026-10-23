@@ -44,6 +44,8 @@ EOF
         "$ln" -i ln0 -d 10.10.0.3 -l 100 --persist </dev/null >/dev/null || fail=1
         "$ln" -i bond0 -d 10.40.0.2 -l 60 --persist </dev/null >/dev/null || fail=1
         "$ln" -i wg0 -d 10.30.0.2 -l 40 -w egress --persist </dev/null >/dev/null || fail=1
+        # Inside a namespace: re-applied at boot by the watcher service
+        "$ln" --netns lnpeer -i wgp0 -d 10.30.0.1 -l 20 -w egress --persist </dev/null >/dev/null || fail=1
         "$ln" --query </dev/null | tail -1
         ;;
     verify)
@@ -51,7 +53,8 @@ EOF
         for i in $(seq 1 120); do
             tc qdisc show dev ln0 2>/dev/null | grep -q 'prio 1:' && \
             tc qdisc show dev bond0 2>/dev/null | grep -q 'prio 1:' && \
-            tc qdisc show dev wg0 2>/dev/null | grep -q 'prio 1:' && break
+            tc qdisc show dev wg0 2>/dev/null | grep -q 'prio 1:' && \
+            nsenter --net=/run/netns/lnpeer tc qdisc show dev wgp0 2>/dev/null | grep -q 'prio 1:' && break
             sleep 0.5
         done
         sleep 2
@@ -61,11 +64,13 @@ EOF
         r=$(avg_rtt 10.10.0.3); check "ln0 rule effective: 10.10.0.3 ~100ms (got $r)" between "$r" 90 140
         r=$(avg_rtt 10.10.0.2); check "ln0 rule targeted: 10.10.0.2 unaffected (got $r)" between "$r" 0 10
         r=$(avg_rtt 10.40.0.2); check "bond0 rule effective: ~60ms (got $r)" between "$r" 55 90
-        r=$(avg_rtt 10.30.0.2); check "wg0 rule effective: ~40ms (got $r)" between "$r" 38 70
+        check "namespace watcher running" systemctl is-active -q latencyninja-namespaces.service
+        r=$(avg_rtt 10.30.0.2); check "wg0 (40ms) + namespace wgp0 (20ms) rules effective: ~60ms (got $r)" between "$r" 57 90
         [ "$fail" -eq 0 ] && echo "Reboot persistence: PASSED" || echo "Reboot persistence: FAILED"
         ;;
     cleanup)
         for i in ln0 bond0 wg0; do "$ln" -r -i "$i" </dev/null >/dev/null; done
+        "$ln" --netns lnpeer -r -i wgp0 </dev/null >/dev/null
         systemctl disable --now latencyninja-testnet.service &>/dev/null
         bash "$lib_dir/netns_setup.sh" down
         rm -rf "$unit" "$lib_dir"

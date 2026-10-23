@@ -17,11 +17,15 @@
 #
 #   # Latency Ninja snapshot
 #   [scope all]                 <- or [scope <interface>] when saved with --interface
+#   [namespace container:web]   <- only when saved inside a container or namespace
 #   [interface eth0]
 #   --interface
 #   eth0
 #   --latency
 #   30
+#   [end]
+#   [interface eth0 @container:web]   <- host snapshots also include containers and namespaces
+#   ...
 #   [end]
 #   # ... human readable tc dump as comments ...
 
@@ -64,6 +68,33 @@ save_runtime_state() {
     local interface="$1"
     mkdir -p "$state_dir" && chmod 700 "$state_dir"
     build_canonical_args > "$state_dir/$interface.args"
+    # Remember how to re-enter this namespace, so host snapshots can include and restore it.
+    # A container or named namespace reference is kept over a process one, which is less stable.
+    if in_namespace && { [ ! -f "$state_dir/.ref" ] || [[ "$(cat "$state_dir/.ref")" == pid:* ]]; }; then
+        echo "$LATENCYNINJA_NETNS_REF" > "$state_dir/.ref"
+    fi
+}
+
+# Function to list the runtime state files of interfaces shaped in containers and namespaces, as
+# "<state file> <reference>" lines (host only; stale entries are skipped)
+active_namespace_states() {
+    local dir ref ns_file file interface
+    for dir in "$state_root"/ns/*/; do
+        [ -f "$dir.ref" ] || continue
+        ref=$(cat "$dir.ref")
+        ns_file=$(ref_to_nsfile "$ref")
+        [ -n "$ns_file" ] || continue
+        # Skip state left by a namespace that has since been replaced (e.g. a restarted container)
+        [ "$(basename "$dir")" = "ns-$(stat -L -c %i "$ns_file")" ] || continue
+        for file in "$dir"*.args; do
+            [ -f "$file" ] || continue
+            interface=$(basename "$file" .args)
+            if nsenter --net="$ns_file" $ip_path link show "$(ifb_name_for "lni-" "$interface")" &>/dev/null || \
+               nsenter --net="$ns_file" $ip_path link show "$(ifb_name_for "lne-" "$interface")" &>/dev/null; then
+                echo "$file $ref"
+            fi
+        done
+    done
 }
 
 # Function to forget the configuration of an interface
@@ -116,15 +147,25 @@ write_snapshot() {
     {
         echo "# Latency Ninja snapshot"
         echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "# Restore with: $script_path --restore $file$(namespace_hint)"
+        echo "# Restore with: sudo $script_path --restore $file$(namespace_hint)"
         echo "[scope $scope]"
-        in_namespace && echo "[namespace $LATENCYNINJA_NETNS_KEY]"
+        in_namespace && echo "[namespace $LATENCYNINJA_NETNS_REF]"
         for interface in $(active_interfaces); do
             [ "$scope" != "all" ] && [ "$interface" != "$scope" ] && continue
             echo "[interface $interface]"
             cat "$state_dir/$interface.args"
             echo "[end]"
         done
+        # Host snapshots of everything also include the rules of containers and namespaces
+        if [ "$scope" = "all" ] && ! in_namespace; then
+            local state_file ref
+            while read -r state_file ref; do
+                [ -n "$state_file" ] || continue
+                echo "[interface $(basename "$state_file" .args) @$ref]"
+                cat "$state_file"
+                echo "[end]"
+            done <<< "$(active_namespace_states)"
+        fi
         echo "#"
         echo "# ### Previous TC Rules ###"
         echo "#"
@@ -145,16 +186,18 @@ save_snapshot() {
     write_snapshot "$file" "${interface:-all}" || die "Failed to write snapshot file: $file"
 
     local saved
-    saved=$(grep '^\[interface ' "$file" | sed 's/^\[interface \(.*\)\]$/\1/' | tr '\n' ' ')
+    saved=$(grep '^\[interface ' "$file" | sed 's/^\[interface \(.*\)\]$/\1/; s/ @/@/' | tr '\n' ' ')
     echo "Snapshot saved to: $file"
     echo "Interfaces with rules: ${saved:-none}"
 }
 
-# Function to handle --restore: bring the rules back to the state recorded in a snapshot
+# Function to handle --restore: bring the rules back to the state recorded in a snapshot.
+# Entries are "<interface>" (current namespace) or "<interface> @<reference>" (a container or
+# namespace, in host snapshots).
 restore_snapshot() {
     local file="$1"
     local only_interface="$2"
-    local scope="all" current="" line interface failed=0 namespace=""
+    local scope="all" current="" line entry interface ref failed=0 namespace=""
     declare -A saved=()
 
     [ -r "$file" ] || die "Snapshot file not found: $file"
@@ -171,44 +214,69 @@ restore_snapshot() {
         esac
     done < "$file"
 
-    if [ "$namespace" != "${LATENCYNINJA_NETNS_KEY:-}" ]; then
-        die "This snapshot was taken in ${namespace:-the host namespace}, not ${LATENCYNINJA_NETNS_KEY:-the host namespace}. Restore it with the same --netns, --pid or --container option."
+    if [ "$namespace" != "${LATENCYNINJA_NETNS_REF:-}" ]; then
+        die "This snapshot was taken in ${namespace:-the host namespace}, not ${LATENCYNINJA_NETNS_REF:-the host namespace}. Restore it with the same --netns, --pid or --container option."
     fi
 
     [ -n "$only_interface" ] && scope="$only_interface"
     echo "Restoring snapshot $file (scope: $scope)"
 
-    # Roll back interfaces in scope that have rules now but had none in the snapshot
-    local to_rollback
+    # Roll back entries in scope that have rules now but had none in the snapshot
+    local to_rollback=() state_file
     if [ "$scope" = "all" ]; then
-        to_rollback=$(active_interfaces)
+        mapfile -t to_rollback < <(active_interfaces)
+        if ! in_namespace; then
+            while read -r state_file ref; do
+                [ -n "$state_file" ] && to_rollback+=("$(basename "$state_file" .args) @$ref")
+            done <<< "$(active_namespace_states)"
+        fi
     else
-        to_rollback="$scope"
+        to_rollback=("$scope")
     fi
-    for interface in $to_rollback; do
-        [ -n "${saved[$interface]+set}" ] && continue
-        echo "  - $interface: no rules in snapshot, rolling back"
-        "$script_path" --rollback --interface "$interface" --keep-persist </dev/null >/dev/null || failed=1
-        is_persisted "$interface" && echo "    Note: $interface has persisted rules that will be re-applied at boot. Use --rollback to remove them."
+    local ref_options=()
+    for entry in "${to_rollback[@]}"; do
+        [ -n "$entry" ] || continue
+        [ -n "${saved[$entry]+set}" ] && continue
+        echo "  - $entry: no rules in snapshot, rolling back"
+        interface="${entry% @*}"
+        ref_options=()
+        [[ "$entry" == *" @"* ]] && mapfile -t ref_options < <(ref_to_options "${entry#* @}")
+        "$script_path" "${ref_options[@]}" --rollback --interface "$interface" --keep-persist </dev/null >/dev/null || failed=1
+        [[ "$entry" != *" @"* ]] && is_persisted "$interface" && echo "    Note: $interface has persisted rules that will be re-applied at boot. Use --rollback to remove them."
     done
 
-    # Re-apply the saved configuration of each interface in scope
-    local args=()
-    for interface in "${!saved[@]}"; do
-        [ "$scope" != "all" ] && [ "$interface" != "$scope" ] && continue
-        if ! $ip_path link show "$interface" &>/dev/null; then
-            echo "  - $interface: interface not found, skipping"
-            failed=1
-            continue
+    # Re-apply the saved configuration of each entry in scope
+    local args=() ns_file
+    for entry in "${!saved[@]}"; do
+        interface="${entry% @*}"
+        ref_options=()
+        if [[ "$entry" == *" @"* ]]; then
+            # Containers and namespaces are only restored with the whole host snapshot
+            [ "$scope" != "all" ] && continue
+            ref="${entry#* @}"
+            ns_file=$(ref_to_nsfile "$ref")
+            if [ -z "$ns_file" ] || ! nsenter --net="$ns_file" $ip_path link show "$interface" &>/dev/null; then
+                echo "  - $entry: $(ref_description "$ref") or its interface not found, skipping"
+                failed=1
+                continue
+            fi
+            mapfile -t ref_options < <(ref_to_options "$ref")
+        else
+            [ "$scope" != "all" ] && [ "$interface" != "$scope" ] && continue
+            if ! $ip_path link show "$interface" &>/dev/null; then
+                echo "  - $entry: interface not found, skipping"
+                failed=1
+                continue
+            fi
         fi
-        mapfile -t args <<< "${saved[$interface]%$'\n'}"
+        mapfile -t args <<< "${saved[$entry]%$'\n'}"
         if ! validate_saved_args "${args[@]}"; then
-            echo "  - $interface: invalid saved arguments, skipping"
+            echo "  - $entry: invalid saved arguments, skipping"
             failed=1
             continue
         fi
-        echo "  - $interface: re-applying ${args[*]}"
-        "$script_path" "${args[@]}" </dev/null >/dev/null || { echo "    Failed to re-apply rules for $interface"; failed=1; }
+        echo "  - $entry: re-applying ${args[*]}"
+        "$script_path" "${ref_options[@]}" "${args[@]}" </dev/null >/dev/null || { echo "    Failed to re-apply rules for $entry"; failed=1; }
     done
 
     [ "$failed" -eq 0 ] && echo "Snapshot restored." || die "Snapshot restored with errors."

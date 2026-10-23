@@ -39,4 +39,4 @@ Every pull request runs:
 
 ## Releases
 
-Releases are automatic. When a pull request that changes `version.txt` is merged into `main`, the Release workflow creates the `vX.Y` tag and a GitHub release whose notes are that version's `CHANGELOG.md` entries. Users running `./latencyninja --update` are then offered the new version.
+Releases are automatic. When a pull request that changes `version.txt` is merged into `main`, the Release workflow creates the `vX.Y` tag and a GitHub release whose notes are that version's `CHANGELOG.md` entries. Users running `sudo ./latencyninja --update` are then offered the new version.

@@ -36,6 +36,7 @@ script_dir="$(dirname "$script_path")"
 . "$script_dir/inc/profile_utils.sh"
 . "$script_dir/inc/schedule_utils.sh"
 . "$script_dir/inc/namespace_utils.sh"
+. "$script_dir/inc/json_utils.sh"
 
 # Global main function
 main() {
@@ -85,14 +86,14 @@ main() {
     save_runtime_state "$eth_interface"
     append_applied_values "$backup_file"
     log_execution "$log_file" "$@"
-    echo "Backup saved to: $backup_file (restore with: $0 --restore $backup_file$(namespace_hint))"
+    echo "Backup saved to: $backup_file (restore with: sudo $0 --restore $backup_file$(namespace_hint))"
     echo "Log updated at: $log_file"
 
     [ -n "$duration" ] && schedule_rollback "$eth_interface" "$duration_seconds" "$backup_file"
 
     if [ "$persist" -eq 1 ]; then
         persist_rules "$eth_interface"
-    elif is_persisted "$eth_interface" && ! diff -q <(build_canonical_args) "$persist_dir/$eth_interface.args" &>/dev/null; then
+    elif is_persisted "$eth_interface" && ! diff -q <(build_canonical_args) "$(persist_file "$eth_interface")" &>/dev/null; then
         echo "Note: $eth_interface has different persisted rules that will be re-applied at boot. Add --persist to replace them."
     fi
 }
