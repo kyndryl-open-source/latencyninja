@@ -1,0 +1,37 @@
+name: Release
+
+# Creates the vX.Y tag and GitHub release when a new version.txt lands on main.
+on:
+  push:
+    branches: [main]
+    paths: [version.txt]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag and release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(tr -d '[:space:]' < version.txt)
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists, nothing to do."
+            exit 0
+          fi
+          tools/changelog_notes.sh "$version" > notes.md
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Latency Ninja $version" --notes-file notes.md

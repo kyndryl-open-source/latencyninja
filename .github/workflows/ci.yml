@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bash syntax
+        run: for f in latencyninja inc/*.sh tests/*.sh tools/*.sh; do bash -n "$f" || exit 1; done
+
+      - name: ShellCheck (errors)
+        run: shellcheck --severity=error latencyninja inc/*.sh tests/*.sh tools/*.sh
+
+  version:
+    name: Version bump and CHANGELOG
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version.txt and CHANGELOG.md
+        run: tools/check_version.sh "origin/${{ github.base_ref }}"
+
+  functional:
+    name: Functional tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq kmod iproute2 inetutils-ping curl jq git python3 wireguard-tools
+          for module in ifb sch_netem bonding wireguard; do
+            sudo modprobe "$module" || { sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)" && sudo modprobe "$module"; }
+          done
+
+      - name: Run test suite
+        run: sudo bash tests/run_tests.sh
