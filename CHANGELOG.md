@@ -1,3 +1,6 @@
+CHANGELOG 1.26.1
+- --show-interfaces now requires root like every other command, so there is no exception to remember; it always shows persistence and timed rollbacks
+
 CHANGELOG 1.26
 - JSON files support every option that applies rules: added container, netns, pid, persist, backup and logging; src_ip/dst_ip can be arrays and numbers don't need quotes; unknown keys, wrong value types and invalid JSON are rejected
 - --persist works with --container and --netns: a watcher service (latencyninja-namespaces) re-applies the rules when the container restarts or the namespace or interface is re-created; containers are tracked by name; --pid can't be persisted
