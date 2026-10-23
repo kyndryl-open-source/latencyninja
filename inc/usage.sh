@@ -35,6 +35,7 @@ about() {
     echo "  -v, --version                                   Display current version."
     echo    
     echo "  -q, --query                                     Display current tc rules."
+    echo "  --show-interfaces                               List network interfaces with their type, IPv4 address and Latency Ninja status."
     echo "  -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface."
     echo
     echo "  -i, --interface <interface>                     Desired network interface (e.g., eth0)."
@@ -87,6 +88,7 @@ usage() {
     echo "  -v, --version     Display current version."
     echo    
     echo "  -q, --query       Display current tc rules."
+    echo "  --show-interfaces List interfaces, their type, IPv4 and Latency Ninja status."
     echo "  -r, --rollback    Rollback networking changes. (Requires -i)"
     echo
     echo "  -i, --interface   Network interface (e.g., eth0)."

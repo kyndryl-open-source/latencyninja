@@ -43,7 +43,10 @@ This program is distributed under the GNU General Public License (GPL), it is di
 ## Prerequisites
 
 1. Latency Ninja requires the following packages installed on the system, however it will also attempt to dnf install/apt install missing packages:
-      - kmod, iproute, kernel-modules-extra, iproute-tc, iputils, curl, git, jq.
+      - CentOS/Fedora/Red Hat: kmod, iproute, kernel-modules-extra, iproute-tc, iputils, curl, jq
+      - Debian/Ubuntu: kmod, iproute2, inetutils-ping, curl, jq
+      - git is also required to use `--update`.
+      - `--persist` and `--duration` require systemd.
 2. `root` or `sudo` privileges are required.
 
 ## Compatibility
@@ -79,6 +82,7 @@ Add executible permissions:
       -v, --version                                   Display current version.
 
       -q, --query                                     Display current tc rules applied.
+      --show-interfaces                               List network interfaces with their type, IPv4 address and Latency Ninja status.
       -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface.
 
       -i, --interface <interface>                     Desired network interface (e.g., eth0).
@@ -162,6 +166,10 @@ Make sure the JSON file is formated using the following template:
             "profile": "4g",
             "duration": "15m"
       }
+
+To list the interfaces you can apply rules to, with their type (ethernet, bond, WireGuard, ...), IPv4 address and whether Latency Ninja rules, persistence or a timed rollback are active, run (root is only needed to see persistence and timed rollbacks):
+
+      ./latencyninja --show-interfaces
 
 To display current network perturbations rules, run:
 

@@ -38,6 +38,11 @@ script_dir="$(dirname "$script_path")"
 
 # Global main function
 main() {
+    # Listing interfaces doesn't need root or the other system checks
+    for arg in "$@"; do
+        [[ "$arg" == "--show-interfaces" ]] && { show_available_interfaces; exit 0; }
+    done
+
     update_requested=0
     for arg in "$@"; do
         [[ "$arg" == "--update" ]] && update_requested=1 && break

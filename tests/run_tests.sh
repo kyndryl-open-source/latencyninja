@@ -114,6 +114,21 @@ run_test() {
     fi
 }
 
+# Print bond diagnostics (used when bond connectivity is unexpectedly lost)
+bond_diag() {
+    local p=(nsenter --net=/run/netns/lnpeer)
+    echo "    DIAG bond0 mac $(cat /sys/class/net/bond0/address), active $(awk '/Currently Active/ {print $4}' /proc/net/bonding/bond0)"
+    "${p[@]}" ip neigh show 10.40.0.1 | sed 's/^/      peer-neigh /'
+    ip neigh show dev bond0 | sed 's/^/      neigh /'
+    "${p[@]}" bridge fdb show br lnbr0 | grep -v permanent | sed 's/^/      fdb /'
+    tc -s qdisc show dev bond0 | sed 's/^/      bond0 /'
+    tc -s filter show dev bond0 | sed 's/^/      bond0-filter /'
+    ip -br link | grep -E 'bond0|lnb|ln[ie]-bond' | sed 's/^/      /'
+    tc -s qdisc show dev lne-bond0 2>&1 | sed 's/^/      lne /'
+    tc -s qdisc show dev lni-bond0 2>&1 | sed 's/^/      lni /'
+    journalctl --since "-30s" --no-pager -o short-precise | grep -E 'latencyninja@bond0|bond0|lnb' | tail -15 | sed 's/^/      /'
+}
+
 # ---------- tests: CLI basics ----------
 
 test_cli_version() {
@@ -392,6 +407,9 @@ test_bond_directions() {
 }
 
 test_bond_ports_and_failover() {
+    # Sanity check of the test topology: active-backup slaves must share the bond's MAC address
+    local bond_mac; bond_mac=$(cat /sys/class/net/bond0/address)
+    check "bond members share the bond MAC" [ "$(cat /sys/class/net/lnb0/address)" = "$bond_mac" -a "$(cat /sys/class/net/lnb1/address)" = "$bond_mac" ]
     ln --interface bond0 --dst_ip 10.40.0.2:8080 --latency 100
     local t
     t=$(tcp_rtt 10.40.0.2 8080); check "TCP 8080 delayed (got $t)" between "$t" 90 140
@@ -590,8 +608,11 @@ test_persist_bond_recreate() {
     check "apply exit code 0" [ "$rc" -eq 0 ]
     bash "$tests_dir/netns_setup.sh" bond-recreate
     check "rules re-applied after re-create" wait_for_rules bond0
+    local bond_mac; bond_mac=$(cat /sys/class/net/bond0/address)
+    check "re-created bond members share the bond MAC" [ "$(cat /sys/class/net/lnb0/address)" = "$bond_mac" -a "$(cat /sys/class/net/lnb1/address)" = "$bond_mac" ]
     sleep 2   # the peer has to learn the new bond MAC address
     ping_stats 10.40.0.2; check "RTT ~60ms (got $avg)" between "$avg" 55 80
+    between "$avg" 55 80 || bond_diag
 }
 
 test_persist_rollback_removes() {
@@ -788,6 +809,36 @@ test_duration_validation() {
     check "nothing applied" not_contains "$(tc qdisc show dev $dev)" "prio"
 }
 
+# ---------- tests: interface listing ----------
+
+test_show_interfaces() {
+    ln --interface bond0 --dst_ip 10.40.0.2 --latency 10 --persist
+    ln --interface "$dev" --dst_ip 10.10.0.3 --latency 10 --direction ingress
+    ln --interface wg0 --dst_ip 10.30.0.2 --latency 10 --direction egress --duration 10m
+    ln --show-interfaces
+    check "exit code 0" [ "$rc" -eq 0 ]
+    local line
+    line=$(grep '^bond0 ' <<< "$out"); check "bond0: type, address, rules and persistence" contains "$line" "bond"
+    check "bond0 shows IPv4 and status" contains "$line" "10.40.0.1/24         rules (both), persisted"
+    line=$(grep '^wg0 ' <<< "$out")
+    check "wg0: wireguard, egress rules and timed rollback" contains "$line" "wireguard"
+    check "wg0 shows rollback timer" contains "$line" "rules (egress), rollback in"
+    check "ln0 shows ingress rules" contains "$(grep "^$dev " <<< "$out")" "veth"
+    check "ln0 status" contains "$(grep "^$dev " <<< "$out")" "rules (ingress)"
+    check "bond members labelled" contains "$(grep '^lnb0 ' <<< "$out")" "bond member of bond0"
+    check "ifb devices hidden" not_contains "$out" "lni-"
+    check "loopback hidden" not_contains "$out" "loopback"
+}
+
+test_show_interfaces_non_root() {
+    [ -z "${SUDO_USER:-}" ] && return 77
+    ln --interface bond0 --dst_ip 10.40.0.2 --latency 10 --persist
+    out=$(cd "$repo_dir" && sudo -u "$SUDO_USER" ./latencyninja --show-interfaces </dev/null 2>&1); rc=$?
+    check "works without root (exit $rc)" [ "$rc" -eq 0 ]
+    check "rules visible without root" contains "$(grep '^bond0 ' <<< "$out")" "rules (both)"
+    check "notes root is needed for persistence" contains "$out" "Run as root"
+}
+
 # ---------- tests: updater ----------
 
 test_update() {
@@ -832,6 +883,7 @@ for t in \
     rate_egress rate_ingress rate_both_directions rate_port_and_units rate_validation \
     profile_apply profile_override profile_list_and_errors profile_custom profile_saved_as_values profile_and_rate_json \
     duration_expires_to_clean duration_restores_previous duration_cancelled duration_multi_interface duration_validation \
+    show_interfaces show_interfaces_non_root \
     update
 do
     run_test "$t"
