@@ -52,5 +52,8 @@ append_applied_values() {
         [ -n "$duplicate" ] && echo "Duplicate: ${duplicate}%"
         [ -n "$corrupt" ] && echo "Corrupt: ${corrupt}%"
         [ -n "$reorder" ] && echo "Reorder: ${reorder}%"
+        [ -n "$rate" ] && echo "Rate: ${rate}"
+        [ -n "$profile" ] && echo "Profile: ${profile}"
+        [ -n "$duration" ] && echo "Duration: ${duration}"
     } | sed 's/^/# /' >> "$backup_file"
 }

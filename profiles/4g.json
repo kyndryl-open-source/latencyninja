@@ -1,0 +1,1 @@
+{ "description": "4G/LTE mobile network", "latency": "60", "jitter": "15", "packet_loss": "0.2", "rate": "20mbit" }

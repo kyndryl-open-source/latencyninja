@@ -1,0 +1,1 @@
+{ "description": "Congested Wi-Fi with interference", "latency": "15", "jitter": "10", "packet_loss": "3", "duplicate": "0.5", "rate": "20mbit" }

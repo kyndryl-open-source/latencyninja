@@ -36,6 +36,11 @@ get_arguments() {
             -y|--duplicate) process_arg duplicate "" "$@"; shift 2 ;;
             -z|--corrupt) process_arg corrupt "" "$@"; shift 2 ;;
             -k|--reorder) process_arg reorder "" "$@"; shift 2 ;;
+            -b|--rate) process_arg rate "" "$@"; shift 2 ;;
+            -p|--profile) process_arg profile "" "$@"; shift 2 ;;
+            --profiles) list_profiles; exit 0 ;;
+            -t|--duration) process_arg duration "" "$@"; shift 2 ;;
+            --timed-rollback) process_arg timed_rollback_file "" "$@"; shift 2 ;;
             --json) json_file="$2"; shift 2 ;;
             --backup) backup_dir="$2"; shift 2 ;;
             --logging) log_file="$2"; shift 2 ;;
@@ -58,7 +63,7 @@ process_arg() {
 
     shift 2
     if [[ -z "$2" || "$2" == -* ]]; then
-        die "The -$1 option requires an argument."
+        die "The $1 option requires an argument."
     else
         if [[ -n "$flag_name" ]]; then
             declare -g "$flag_name=1"
@@ -104,7 +109,19 @@ parse_arguments() {
 
         json_packet_loss=$($jq_path -r '.packet_loss // empty' "$json_file")
         [ ! -z "$json_packet_loss" ] && packet_loss="$json_packet_loss"
+
+        json_rate=$($jq_path -r '.rate // empty' "$json_file")
+        [ ! -z "$json_rate" ] && rate="$json_rate"
+
+        json_profile=$($jq_path -r '.profile // empty' "$json_file")
+        [ ! -z "$json_profile" ] && profile="$json_profile"
+
+        json_duration=$($jq_path -r '.duration // empty' "$json_file")
+        [ ! -z "$json_duration" ] && duration="$json_duration"
     fi
+
+    # Fill in parameters that weren't given explicitly from the selected profile
+    [ -n "$profile" ] && load_profile "$profile"
 
     # Validate the interface if one was given to scope --save/--restore
     if [ -n "$eth_interface" ] && { [ -n "$save_file" ] || [ -n "$restore_file" ]; }; then
@@ -127,8 +144,11 @@ parse_arguments() {
     fi
     set_ifb_interfaces "$eth_interface"
 
+    [ -n "$timed_rollback_file" ] && { run_timed_rollback "$eth_interface" "$timed_rollback_file"; exit $?; }
+
     if [ "$rollback_required" -eq 1 ]; then
         rollback_everything
+        cancel_scheduled_rollback "$eth_interface"
         clear_runtime_state "$eth_interface"
         [ "$keep_persist" -eq 0 ] && unpersist_rules "$eth_interface"
         echo -e "\nRolled back network perturbations changes for interface $eth_interface."
@@ -136,6 +156,10 @@ parse_arguments() {
     fi
 
     [ "$persist" -eq 1 ] && check_persist_supported
+    if [ -n "$duration" ]; then
+        [ "$persist" -eq 1 ] && die "The --duration option cannot be combined with --persist."
+        command -v systemd-run &>/dev/null && [ -d /run/systemd/system ] || die "The --duration option requires systemd."
+    fi
     
     local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk 'NR==1 {print $4}' | cut -d'/' -f1)
     if [ -z "$local_ip" ] && { [ "${#src_ip[@]}" -eq 0 ] || [ "${#dst_ip[@]}" -eq 0 ]; }; then
@@ -158,11 +182,11 @@ parse_arguments() {
         die "Interface, destination or source IP/network are mandatory. Use --help for usage information."
 
     # Validate other mandatory parameters
-    [ -z "$latency" ] && [ -z "$jitter" ] && [ -z "$duplicate" ]  && [ -z "$corrupt" ] && [ -z "$reorder" ] && [ -z "$packet_loss" ] &&
-        die "At least one of the parameters (latency, jitter, duplicate, corrupt, reorder, packet_loss) must be provided. Use --help for usage information."
+    [ -z "$latency" ] && [ -z "$jitter" ] && [ -z "$duplicate" ]  && [ -z "$corrupt" ] && [ -z "$reorder" ] && [ -z "$packet_loss" ] && [ -z "$rate" ] &&
+        die "At least one of the parameters (latency, jitter, duplicate, corrupt, reorder, packet_loss, rate) or a profile must be provided. Use --help for usage information."
 
-    # Check that when using -j, the -l is set
-    if [ "$jitter_provided" -eq 1 ] && [ "$latency_provided" -eq 0 ]; then
+    # Check that jitter comes with latency (from the command line, JSON or a profile)
+    if [ -n "$jitter" ] && [ -z "$latency" ]; then
         die "Jitter can only be used with latency. Use --help for usage information."
     fi
 
@@ -180,12 +204,41 @@ validate_arguments() {
     for dip in "${dst_ip[@]}"; do 
         [ -n "$dip" ] && validate_ip "$dip" "dst_ip"
     done
-    [ -n "$latency" ] && latency=$(validate_numeric "$latency" "latency")
-    [ -n "$jitter" ] && jitter=$(validate_numeric "$jitter" "jitter")
-    [ -n "$packet_loss" ] && packet_loss=$(validate_numeric "$packet_loss" "packet_loss")
-    [ -n "$duplicate" ] && duplicate=$(validate_numeric "$duplicate" "duplicate")
-    [ -n "$corrupt" ] && corrupt=$(validate_numeric "$corrupt" "corrupt")
-    [ -n "$reorder" ] && reorder=$(validate_numeric "$reorder" "reorder")
+    local param
+    for param in latency jitter packet_loss duplicate corrupt reorder; do
+        [ -n "${!param}" ] && check_numeric "$param"
+    done
+    [ -n "$rate" ] && validate_rate "$rate"
+    if [ -n "$duration" ]; then
+        # die() inside $(...) only exits the subshell, so propagate the failure
+        duration_seconds=$(parse_duration "$duration") || { echo "$duration_seconds"; exit 1; }
+    fi
+}
+
+# Function to validate and normalize a numeric parameter in place
+check_numeric() {
+    local name="$1"
+    local value
+    value=$(validate_numeric "${!name}" "$name") || { echo "$value"; exit 1; }
+    declare -g "$name=$value"
+}
+
+# Function to validate a bandwidth rate in tc units (e.g. 512kbit, 2mbit, 1gbit, 10mbps)
+validate_rate() {
+    if ! [[ "$1" =~ ^[0-9]+(\.[0-9]+)?(bit|kbit|mbit|gbit|bps|kbps|mbps|gbps)$ ]] || ! awk -v v="${1%%[a-z]*}" 'BEGIN{exit !(v>0)}'; then
+        die "Invalid rate format. Use a positive number with a unit: bit, kbit, mbit, gbit (bits/s) or bps, kbps, mbps, gbps (bytes/s), e.g. 2mbit."
+    fi
+}
+
+# Function to convert a duration (e.g. 90, 30s, 10m, 2h, 1d) to seconds
+parse_duration() {
+    local value="$1"
+    [[ "$value" =~ ^([0-9]+)([smhd]?)$ ]] || die "Invalid duration format. Use a positive number with an optional unit: s, m, h or d (e.g. 30s, 10m, 2h)."
+    local amount="${BASH_REMATCH[1]}" unit="${BASH_REMATCH[2]:-s}"
+    local -A factor=([s]=1 [m]=60 [h]=3600 [d]=86400)
+    local seconds=$((10#$amount * ${factor[$unit]}))
+    [ "$seconds" -gt 0 ] || die "Invalid duration format. The duration must be greater than zero."
+    echo "$seconds"
 }
 
 # Function to validate the interface
@@ -287,6 +340,9 @@ display_params() {
     [ -n "$duplicate" ] && echo "  - Duplication: $duplicate %"    
     [ -n "$corrupt" ] && echo "  - Corruption: $corrupt %"
     [ -n "$reorder" ] && echo "  - Reorder: $reorder %"
+    [ -n "$rate" ] && echo "  - Rate: $rate"
+    [ -n "$profile" ] && echo "  - Profile: $profile"
+    [ -n "$duration" ] && echo "  - Duration: $duration (automatic rollback)"
 
     if [ "$stage" = "Applied" ]; then
         echo

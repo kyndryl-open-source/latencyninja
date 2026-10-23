@@ -36,7 +36,7 @@ convert_hex_to_ip() {
 # Function to extract current tc netem rules
 extract_netem_details() {
     local dev="$1"
-    tc -s qdisc show dev "$dev" | grep -E "delay|loss|duplicate|reorder|corrupt" | sed 's/^.*delay/netem: delay/' | sed 's/  / jitter /' | sed 's/gap [0-9]*//'
+    $tc_path qdisc show dev "$dev" | grep '^qdisc netem' | sed -E 's/^qdisc netem [^ ]+ (root|parent [^ ]+) (refcnt [0-9]+ )?limit [0-9]+ ?/netem: /' | sed 's/  / jitter /' | sed 's/gap [0-9]*//'
 }
 
 # Function to query current tc rules
@@ -137,4 +137,5 @@ query(){
     local persisted
     persisted=$(persisted_interfaces | tr '\n' ' ')
     echo "Persisted interfaces: ${persisted:-none}"
+    echo "Scheduled rollbacks: $(scheduled_rollbacks)"
 }

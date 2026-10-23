@@ -33,6 +33,8 @@ script_dir="$(dirname "$script_path")"
 . "$script_dir/inc/logging_utils.sh"
 . "$script_dir/inc/snapshot_utils.sh"
 . "$script_dir/inc/persist_utils.sh"
+. "$script_dir/inc/profile_utils.sh"
+. "$script_dir/inc/schedule_utils.sh"
 
 # Global main function
 main() {
@@ -56,18 +58,19 @@ main() {
     backup_tc_snapshot "$backup_file"
 
     rollback_required=1
+    cancel_scheduled_rollback "$eth_interface"  # new rules replace any pending timed rollback
     load_ifb_module
     rollback_everything silent
     display_params "Applying"
     if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb0_interface"
         bring_up_interface "$ifb0_interface"
-        configure_ingress_traffic_controls "$eth_interface" "$ifb0_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
+        configure_ingress_traffic_controls "$eth_interface" "$ifb0_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder" "$rate"
     fi
     if [ "$direction" == "egress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb1_interface"
         bring_up_interface "$ifb1_interface"
-        configure_egress_traffic_controls "$eth_interface" "$ifb1_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder"
+        configure_egress_traffic_controls "$eth_interface" "$ifb1_interface" src_ip[@] dst_ip[@] "$latency" "$jitter" "$packet_loss" "$duplicate" "$corrupt" "$reorder" "$rate"
     fi
     display_params "Applied"
     save_runtime_state "$eth_interface"
@@ -75,6 +78,8 @@ main() {
     log_execution "$log_file" "$@"
     echo "Backup saved to: $backup_file (restore with: $0 --restore $backup_file)"
     echo "Log updated at: $log_file"
+
+    [ -n "$duration" ] && schedule_rollback "$eth_interface" "$duration_seconds" "$backup_file"
 
     if [ "$persist" -eq 1 ]; then
         persist_rules "$eth_interface"
