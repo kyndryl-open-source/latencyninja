@@ -101,6 +101,7 @@ check() {
 }
 
 contains() { grep -qF -- "$2" <<< "$1"; }
+not() { ! "$@"; }
 not_contains() { ! grep -qF -- "$2" <<< "$1"; }
 
 run_test() {
@@ -881,7 +882,8 @@ test_netns_isolation() {
     ln --netns lnpeer --interface "$dev" --dst_ip 10.99.0.2 --latency 10
     check "namespace apply exit code 0" [ "$rc" -eq 0 ]
     ln --save "$work_dir/host-snap"
-    check "host snapshot excludes the namespace" [ "$(grep -c '^\[interface ' "$work_dir/host-snap")" -eq 1 ]
+    check "host snapshot has the host interface" grep -qx "\[interface $dev\]" "$work_dir/host-snap"
+    check "host snapshot has the namespace interface separately" grep -qx "\[interface $dev @netns:lnpeer\]" "$work_dir/host-snap"
     ln --netns lnpeer --rollback --interface "$dev"
     check "namespace rollback doesn't unpersist the host" [ -f "/etc/latencyninja/persist/$dev.args" ]
     ping_stats 10.10.0.3; check "host rules still active (got $avg)" between "$avg" 90 130
@@ -891,7 +893,7 @@ test_netns_isolation() {
 test_netns_timed_rollback() {
     ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100 --duration 3s
     check "timer scheduled" contains "$out" "Rollback of lnpeer0 scheduled"
-    check "timer unit is namespace specific" contains "$out" "latencyninja-rollback-netns"
+    check "timer unit is namespace specific" contains "$out" "latencyninja-rollback-ns"
     local i
     for i in $(seq 1 60); do
         nsenter --net=/run/netns/lnpeer tc qdisc show dev lnpeer0 | grep -q 'prio 1:' || break
@@ -904,7 +906,7 @@ test_netns_snapshot() {
     mkdir -p "$work_dir"
     ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100
     ln --netns lnpeer --save "$work_dir/ns-snap"
-    check "snapshot records the namespace" contains "$(cat "$work_dir/ns-snap")" "[namespace netns-lnpeer]"
+    check "snapshot records the namespace" contains "$(cat "$work_dir/ns-snap")" "[namespace netns:lnpeer]"
     ln --netns lnpeer --rollback --interface lnpeer0
     ln --restore "$work_dir/ns-snap"
     check "restoring on the host is refused" contains "$out" "Restore it with the same --netns"
@@ -934,8 +936,8 @@ test_namespace_errors() {
     check "unknown container rejected" contains "$out" "Container not found: lntest-nope"
     ln --netns lnpeer --pid 1 --query
     check "only one target allowed" contains "$out" "Only one of --netns, --pid or --container"
-    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 10 --persist
-    check "--persist refused in a namespace" contains "$out" "--persist option isn't supported"
+    ln --pid "$(cat /run/latencyninja-test-listener.pid)" --interface lnpeer0 --dst_ip 10.10.0.1 --latency 10 --persist
+    check "--persist refused for a process" contains "$out" "isn't supported with --pid"
 }
 
 test_container_target() {
@@ -959,6 +961,162 @@ test_container_target() {
     ln --container lntest --rollback --interface eth0
     ping_stats "$cip"; check "rollback in the container (got $avg)" between "$avg" 0 10
     "$rt" rm -f -t 0 lntest &>/dev/null || "$rt" rm -f lntest &>/dev/null
+}
+
+# ---------- tests: feature completeness (JSON, persistence, snapshots) ----------
+
+ns_has_rules() { nsenter --net=/run/netns/lnpeer tc qdisc show dev "${1:-lnpeer0}" 2>/dev/null | grep -q 'prio 1:'; }
+
+test_json_every_option() {
+    mkdir -p "$work_dir/jbk"; rm -f "$work_dir/jbk/"* "$work_dir/j.log"
+    cat > "$work_dir/all.json" <<EOF
+{ "interface": "$dev", "src_ip": "10.10.0.1", "dst_ip": ["10.10.0.2:8080", "10.10.0.3"], "direction": "egress",
+  "latency": 100, "jitter": 1, "packet_loss": "0.1", "duplicate": 0.1, "corrupt": 0.1, "reorder": 1, "rate": "50mbit",
+  "duration": "1h", "backup": "$work_dir/jbk", "logging": "$work_dir/j.log" }
+EOF
+    ln --json "$work_dir/all.json"
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    local q; q=$(tc qdisc show dev lne-$dev)
+    local p
+    for p in "delay 100ms" "loss 0.1%" "duplicate 0.1%" "corrupt 0.1%" "reorder 1%" "rate 50Mbit"; do
+        check "JSON value applied: $p" contains "$q" "$p"
+    done
+    check "array of destinations with ports" contains "$(tc filter show dev lne-$dev)" "00001f90"
+    check "duration from JSON scheduled a rollback" contains "$out" "Rollback of $dev scheduled"
+    check "backup directory from JSON" [ -n "$(ls "$work_dir/jbk")" ]
+    check "log file from JSON" [ -s "$work_dir/j.log" ]
+    local t; t=$(tcp_rtt 10.10.0.2 8080); check "10.10.0.2:8080 delayed (got $t)" between "$t" 90 140
+}
+
+test_json_persist_and_profile() {
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.3\", \"profile\": \"transatlantic\", \"persist\": true }" > "$work_dir/p.json"
+    ln --json "$work_dir/p.json"
+    check "persist from JSON" [ -f "/etc/latencyninja/persist/$dev.args" ]
+    check "profile from JSON stored as values" contains "$(tr '\n' ' ' < /etc/latencyninja/persist/$dev.args)" "--latency 80"
+}
+
+test_json_namespaces() {
+    echo '{ "netns": "lnpeer", "interface": "lnpeer0", "dst_ip": "10.10.0.1", "latency": 100 }' > "$work_dir/ns.json"
+    ln --json "$work_dir/ns.json"
+    check "netns from JSON" contains "$out" "Namespace: network namespace lnpeer"
+    ping_stats 10.10.0.2; check "rules applied in the namespace (got $avg)" between "$avg" 90 130
+    ln --netns lnpeer --rollback --interface lnpeer0
+    echo "{ \"pid\": $(cat /run/latencyninja-test-listener.pid), \"interface\": \"lnpeer0\", \"dst_ip\": \"10.10.0.1\", \"latency\": 60, \"direction\": \"egress\" }" > "$work_dir/pid.json"
+    ln --json "$work_dir/pid.json"
+    check "pid from JSON" contains "$out" "Namespace: process"
+    ping_stats 10.10.0.2; check "rules applied in the process namespace (got $avg)" between "$avg" 55 80
+}
+
+test_json_errors() {
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"latncy\": 5 }" > "$work_dir/e1.json"
+    ln --json "$work_dir/e1.json"; check "unknown key rejected" contains "$out" "Unknown key(s) in JSON file"
+    echo "{ bad" > "$work_dir/e2.json"
+    ln --json "$work_dir/e2.json"; check "invalid JSON rejected" contains "$out" "Invalid JSON file"
+    echo "[1, 2]" > "$work_dir/e3.json"
+    ln --json "$work_dir/e3.json"; check "non-object JSON rejected" contains "$out" "Invalid JSON file"
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"latency\": [5] }" > "$work_dir/e4.json"
+    ln --json "$work_dir/e4.json"; check "array for a scalar key rejected" contains "$out" "Invalid value type for latency"
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"latency\": 5, \"persist\": \"maybe\" }" > "$work_dir/e5.json"
+    ln --json "$work_dir/e5.json"; check "invalid persist value rejected" contains "$out" "Invalid value for persist"
+    echo '{ "netns": "lnpeer", "pid": 1, "interface": "lnpeer0" }' > "$work_dir/e6.json"
+    ln --json "$work_dir/e6.json"; check "two targets rejected" contains "$out" "Only one of container, netns or pid"
+    echo '{ "netns": "lnpeer", "interface": "lnpeer0", "dst_ip": "10.10.0.1", "latency": 5 }' > "$work_dir/e7.json"
+    ln --pid 1 --json "$work_dir/e7.json"; check "target on command line and in JSON rejected" contains "$out" "both on the command line and in the JSON file"
+    ln --json /nonexistent.json; check "missing file rejected" contains "$out" "JSON file not found"
+    check "nothing applied" not_contains "$(tc qdisc show dev $dev)" "prio"
+}
+
+test_profile_unknown_key() {
+    mkdir -p /etc/latencyninja/profiles
+    echo '{ "description": "Typo", "latncy": "70" }' > /etc/latencyninja/profiles/lntypo.json
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile lntypo
+    check "unknown profile key rejected" contains "$out" "Unknown key(s) in profile"
+    rm -f /etc/latencyninja/profiles/lntypo.json
+}
+
+test_persist_netns() {
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100 --persist
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "persisted in the namespace" [ -f /etc/latencyninja/persist/netns/lnpeer/lnpeer0.args ]
+    check "watcher running" systemctl is-active -q latencyninja-namespaces.service
+    check "query lists the namespace interface" contains "$(cd "$repo_dir" && ./latencyninja --query </dev/null)" "lnpeer0@netns:lnpeer"
+    check "show-interfaces marks it persisted" contains "$(cd "$repo_dir" && ./latencyninja --netns lnpeer --show-interfaces </dev/null | grep '^lnpeer0 ')" "persisted"
+
+    # Rules removed in the same namespace (e.g. --restore) are not re-applied
+    ln --netns lnpeer --rollback --interface lnpeer0 --keep-persist
+    sleep 7
+    check "not re-applied in the same namespace" not ns_has_rules
+
+    # A re-created interface gets its rules back
+    bash "$tests_dir/netns_setup.sh" veth-recreate
+    local i
+    for i in $(seq 1 60); do ns_has_rules && break; sleep 0.25; done
+    check "re-applied after the interface was re-created" ns_has_rules
+    sleep 0.5
+    ping_stats 10.10.0.2; check "re-applied rules effective (got $avg)" between "$avg" 90 130
+
+    ln --netns lnpeer --rollback --interface lnpeer0
+    check "rollback removes namespace persistence" [ ! -f /etc/latencyninja/persist/netns/lnpeer/lnpeer0.args ]
+    check "watcher stopped when nothing is persisted" not systemctl is-active -q latencyninja-namespaces.service
+}
+
+test_persist_container() {
+    local rt; rt=$(container_runtime)
+    [ -z "$rt" ] && return 77
+    "$rt" rm -f lntest &>/dev/null
+    "$rt" run -d --name lntest docker.io/library/alpine:3 sleep 600 &>/dev/null || return 77
+    local gw cip
+    gw=$("$rt" inspect -f '{{.NetworkSettings.Gateway}}' lntest)
+    ln --container lntest --interface eth0 --dst_ip "$gw" --latency 100 --persist
+    check "persisted by container name" [ -f /etc/latencyninja/persist/container/lntest/eth0.args ]
+    "$rt" restart -t 0 lntest &>/dev/null
+    cip=$("$rt" inspect -f '{{.NetworkSettings.IPAddress}}' lntest)
+    local i
+    for i in $(seq 1 30); do
+        (cd "$repo_dir" && ./latencyninja --container lntest --show-interfaces </dev/null 2>/dev/null) | grep -q 'rules (both)' && break
+        sleep 0.5
+    done
+    sleep 0.5
+    ping_stats "$cip"; check "rules re-applied after the container restarted (got $avg)" between "$avg" 90 130
+    ln --container lntest --rollback --interface eth0
+    check "rollback removes container persistence" [ ! -f /etc/latencyninja/persist/container/lntest/eth0.args ]
+    "$rt" rm -f -t 0 lntest &>/dev/null || "$rt" rm -f lntest &>/dev/null
+}
+
+test_snapshot_all_namespaces() {
+    ln --interface bond0 --dst_ip 10.40.0.2 --latency 60
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100
+    ln --save "$work_dir/everything.snap"
+    check "summary lists the namespace interface" contains "$out" "lnpeer0@netns:lnpeer"
+    ln --rollback --interface bond0
+    ln --netns lnpeer --rollback --interface lnpeer0
+    ln --restore "$work_dir/everything.snap" --interface bond0
+    check "scoped restore leaves namespaces alone" not ns_has_rules
+    ln --restore "$work_dir/everything.snap"
+    check "restore exit code 0" [ "$rc" -eq 0 ]
+    ping_stats 10.40.0.2; check "host rules restored (got $avg)" between "$avg" 55 80
+    ping_stats 10.10.0.2; check "namespace rules restored (got $avg)" between "$avg" 90 130
+    ln --save "$work_dir/empty.snap"
+    ln --rollback --interface bond0
+    ln --netns lnpeer --rollback --interface lnpeer0
+    ln --save "$work_dir/empty.snap"
+    ln --interface bond0 --dst_ip 10.40.0.2 --latency 60
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100
+    ln --restore "$work_dir/empty.snap"
+    check "clean host snapshot also rolls back namespaces" not ns_has_rules
+}
+
+test_namespace_aliases() {
+    # The same namespace targeted two ways shares its state; a host process is the host
+    local pid; pid=$(cat /run/latencyninja-test-listener.pid)
+    ln --pid "$pid" --interface lnpeer0 --dst_ip 10.10.0.1 --latency 60
+    ln --netns lnpeer --rollback --interface lnpeer0
+    ln --save "$work_dir/alias.snap"
+    check "rollback through another target clears the state" not grep -q 'lnpeer0 @' "$work_dir/alias.snap"
+    ln --pid 1 --interface "$dev" --dst_ip 10.10.0.2 --latency 100
+    check "a host process is treated as the host" contains "$out" "uses the host network namespace"
+    check "rules applied on the host" contains "$(tc qdisc show dev lne-$dev 2>/dev/null)" "delay 50ms"
+    check "no namespace hint for the host" not_contains "$out" "--pid 1"
 }
 
 # ---------- tests: updater ----------
@@ -1007,6 +1165,8 @@ for t in \
     duration_expires_to_clean duration_restores_previous duration_cancelled duration_multi_interface duration_validation \
     show_interfaces show_interfaces_non_root \
     netns_apply netns_isolation netns_timed_rollback netns_snapshot pid_target namespace_errors container_target \
+    json_every_option json_persist_and_profile json_namespaces json_errors profile_unknown_key \
+    persist_netns persist_container snapshot_all_namespaces namespace_aliases \
     update
 do
     run_test "$t"
