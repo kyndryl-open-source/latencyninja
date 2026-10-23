@@ -35,6 +35,18 @@ rollback() {
         ip link show "$i" &>/dev/null || continue
         (cd "$repo_dir" && ./latencyninja --rollback --interface "$i" </dev/null >/dev/null 2>&1)
     done
+    # Rules applied inside the peer namespace by the namespace tests
+    for i in $(nsenter --net=/run/netns/lnpeer ip -o link show 2>/dev/null | awk -F': ' '/ ln[ie]-/ {print $2}' | sed 's/^ln[ie]-//; s/@.*//' | sort -u); do
+        (cd "$repo_dir" && ./latencyninja --netns lnpeer --rollback --interface "$i" </dev/null >/dev/null 2>&1)
+    done
+}
+
+# Container runtime available for the container tests (docker or podman), empty if none
+container_runtime() {
+    local r
+    for r in docker podman; do
+        command -v "$r" &>/dev/null && "$r" info &>/dev/null && { echo "$r"; return; }
+    done
 }
 
 # Wait up to 10s until Latency Ninja rules are attached to an interface
@@ -839,6 +851,116 @@ test_show_interfaces_non_root() {
     check "notes root is needed for persistence" contains "$out" "Run as root"
 }
 
+# ---------- tests: namespaces and containers ----------
+
+test_netns_apply() {
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "output names the namespace" contains "$out" "Namespace: network namespace lnpeer"
+    check "rollback hint includes --netns" contains "$out" "--rollback --interface lnpeer0 --netns lnpeer"
+    check "ifb devices created inside the namespace" contains "$(nsenter --net=/run/netns/lnpeer ip -br link)" "lne-lnpeer0"
+    check "no ifb devices on the host" not_contains "$(ip -br link)" "lnpeer0"
+    ping_stats 10.10.0.2; check "traffic to the peer delayed (got $avg)" between "$avg" 90 130
+    check "host ln0 untouched" not_contains "$(tc qdisc show dev $dev)" "prio"
+    ln --netns lnpeer --show-interfaces
+    check "show-interfaces lists the namespace's interfaces" contains "$(grep '^lnpeer0 ' <<< "$out")" "rules (both)"
+    check "show-interfaces names the namespace" contains "$out" "Namespace: network namespace lnpeer"
+    ln --netns lnpeer --query
+    check "query lists namespace devices" contains "$out" "Device: lne-lnpeer0"
+    check "query doesn't list host devices" not_contains "$out" "Device: bond0"
+    ln --netns lnpeer --rollback --interface lnpeer0
+    ping_stats 10.10.0.2; check "rollback inside the namespace (got $avg)" between "$avg" 0 10
+}
+
+test_netns_isolation() {
+    # Same interface name on the host and in the namespace: state, rollbacks and persistence stay separate
+    nsenter --net=/run/netns/lnpeer ip link add "$dev" type dummy
+    nsenter --net=/run/netns/lnpeer ip addr add 10.99.0.1/24 dev "$dev"
+    nsenter --net=/run/netns/lnpeer ip link set "$dev" up
+    ln --interface "$dev" --dst_ip 10.10.0.3 --latency 100 --persist
+    ln --netns lnpeer --interface "$dev" --dst_ip 10.99.0.2 --latency 10
+    check "namespace apply exit code 0" [ "$rc" -eq 0 ]
+    ln --save "$work_dir/host-snap"
+    check "host snapshot excludes the namespace" [ "$(grep -c '^\[interface ' "$work_dir/host-snap")" -eq 1 ]
+    ln --netns lnpeer --rollback --interface "$dev"
+    check "namespace rollback doesn't unpersist the host" [ -f "/etc/latencyninja/persist/$dev.args" ]
+    ping_stats 10.10.0.3; check "host rules still active (got $avg)" between "$avg" 90 130
+    nsenter --net=/run/netns/lnpeer ip link delete "$dev"
+}
+
+test_netns_timed_rollback() {
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100 --duration 3s
+    check "timer scheduled" contains "$out" "Rollback of lnpeer0 scheduled"
+    check "timer unit is namespace specific" contains "$out" "latencyninja-rollback-netns"
+    local i
+    for i in $(seq 1 60); do
+        nsenter --net=/run/netns/lnpeer tc qdisc show dev lnpeer0 | grep -q 'prio 1:' || break
+        sleep 0.25
+    done
+    ping_stats 10.10.0.2; check "rules removed after expiry (got $avg)" between "$avg" 0 10
+}
+
+test_netns_snapshot() {
+    mkdir -p "$work_dir"
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 100
+    ln --netns lnpeer --save "$work_dir/ns-snap"
+    check "snapshot records the namespace" contains "$(cat "$work_dir/ns-snap")" "[namespace netns-lnpeer]"
+    ln --netns lnpeer --rollback --interface lnpeer0
+    ln --restore "$work_dir/ns-snap"
+    check "restoring on the host is refused" contains "$out" "Restore it with the same --netns"
+    ln --netns lnpeer --restore "$work_dir/ns-snap"
+    check "restore in the namespace exit code 0" [ "$rc" -eq 0 ]
+    ping_stats 10.10.0.2; check "namespace rules restored (got $avg)" between "$avg" 90 130
+}
+
+test_pid_target() {
+    local pid; pid=$(cat /run/latencyninja-test-listener.pid)
+    ln --pid "$pid" --interface lnpeer0 --dst_ip 10.10.0.1 --latency 60 --direction egress
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "output names the process" contains "$out" "Namespace: process $pid"
+    ping_stats 10.10.0.2; check "traffic delayed (got $avg)" between "$avg" 55 80
+    ln --pid "$pid" --rollback --interface lnpeer0
+    ping_stats 10.10.0.2; check "rollback (got $avg)" between "$avg" 0 10
+}
+
+test_namespace_errors() {
+    ln --netns nope --query
+    check "unknown namespace rejected" contains "$out" "Network namespace not found: nope"
+    ln --netns ../etc --query
+    check "path in namespace name rejected" contains "$out" "Network namespace not found"
+    ln --pid 999999 --query
+    check "unknown PID rejected" contains "$out" "Process not found: 999999"
+    ln --container lntest-nope --query
+    check "unknown container rejected" contains "$out" "Container not found: lntest-nope"
+    ln --netns lnpeer --pid 1 --query
+    check "only one target allowed" contains "$out" "Only one of --netns, --pid or --container"
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 10 --persist
+    check "--persist refused in a namespace" contains "$out" "--persist option isn't supported"
+}
+
+test_container_target() {
+    local rt; rt=$(container_runtime)
+    [ -z "$rt" ] && return 77
+    "$rt" rm -f lntest &>/dev/null
+    "$rt" run -d --name lntest docker.io/library/alpine:3 sleep 600 &>/dev/null || return 77
+    local cip gw
+    cip=$("$rt" inspect -f '{{.NetworkSettings.IPAddress}}' lntest)
+    gw=$("$rt" inspect -f '{{.NetworkSettings.Gateway}}' lntest)
+    ln --container lntest --interface eth0 --dst_ip "$gw" --latency 100
+    check "apply exit code 0 ($rt)" [ "$rc" -eq 0 ]
+    check "output names the container" contains "$out" "Namespace: $rt container lntest"
+    ping_stats "$cip"; check "traffic to the container delayed (got $avg)" between "$avg" 90 130
+    ln --container lntest --show-interfaces
+    check "show-interfaces inside the container" contains "$(grep '^eth0 ' <<< "$out")" "rules (both)"
+    check "host eth0 untouched" not_contains "$(tc qdisc show dev eth0)" "prio 1:"
+    ln --container lntest --interface eth0 --dst_ip "$gw" --latency 20 --duration 3s
+    sleep 6
+    ping_stats "$cip"; check "timed rollback restored the previous container rules (got $avg)" between "$avg" 90 130
+    ln --container lntest --rollback --interface eth0
+    ping_stats "$cip"; check "rollback in the container (got $avg)" between "$avg" 0 10
+    "$rt" rm -f -t 0 lntest &>/dev/null || "$rt" rm -f lntest &>/dev/null
+}
+
 # ---------- tests: updater ----------
 
 test_update() {
@@ -884,6 +1006,7 @@ for t in \
     profile_apply profile_override profile_list_and_errors profile_custom profile_saved_as_values profile_and_rate_json \
     duration_expires_to_clean duration_restores_previous duration_cancelled duration_multi_interface duration_validation \
     show_interfaces show_interfaces_non_root \
+    netns_apply netns_isolation netns_timed_rollback netns_snapshot pid_target namespace_errors container_target \
     update
 do
     run_test "$t"

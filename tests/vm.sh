@@ -36,13 +36,13 @@ provision() {
             limactl shell "$vm_name" -- sudo bash -c '
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update -qq
-                apt-get install -y -qq kmod iproute2 inetutils-ping curl jq git python3 wireguard-tools >/dev/null
+                apt-get install -y -qq kmod iproute2 inetutils-ping curl jq git python3 wireguard-tools podman >/dev/null
                 modprobe ifb && modprobe sch_netem || apt-get install -y -qq "linux-modules-extra-$(uname -r)" >/dev/null'
             ;;
         fedora)
             limactl shell "$vm_name" -- sudo bash -c '
-                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools kernel-modules-extra-$(uname -r) || \
-                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools kernel-modules-extra'
+                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools podman kernel-modules-extra-$(uname -r) || \
+                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools podman kernel-modules-extra'
             ;;
     esac
 }
