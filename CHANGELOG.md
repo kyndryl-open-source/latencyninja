@@ -1,3 +1,11 @@
+CHANGELOG 1.26
+- JSON files support every option that applies rules: added container, netns, pid, persist, backup and logging; src_ip/dst_ip can be arrays and numbers don't need quotes; unknown keys, wrong value types and invalid JSON are rejected
+- --persist works with --container and --netns: a watcher service (latencyninja-namespaces) re-applies the rules when the container restarts or the namespace or interface is re-created; containers are tracked by name; --pid can't be persisted
+- Host snapshots (--save without --interface) include the rules of all containers and namespaces, and --restore re-enters each one
+- Runtime state and timers are keyed by the network namespace itself, so a namespace reached in different ways (e.g. --container and --pid) shares its state, and a target in the host namespace is treated as the host
+- Profiles with unknown keys are rejected
+- Roadmap: planned versions moved by one (safety and automation is now 1.27)
+
 CHANGELOG 1.25
 - Added --container (Docker and Podman), --netns and --pid to apply, query, list (--show-interfaces), snapshot and roll back rules inside a container or network namespace instead of the whole host
 - State, snapshots and timed rollbacks are kept per namespace; snapshots record their namespace and must be restored in the same one; --persist is refused inside namespaces

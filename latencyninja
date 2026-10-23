@@ -36,6 +36,7 @@ script_dir="$(dirname "$script_path")"
 . "$script_dir/inc/profile_utils.sh"
 . "$script_dir/inc/schedule_utils.sh"
 . "$script_dir/inc/namespace_utils.sh"
+. "$script_dir/inc/json_utils.sh"
 
 # Global main function
 main() {
@@ -92,7 +93,7 @@ main() {
 
     if [ "$persist" -eq 1 ]; then
         persist_rules "$eth_interface"
-    elif is_persisted "$eth_interface" && ! diff -q <(build_canonical_args) "$persist_dir/$eth_interface.args" &>/dev/null; then
+    elif is_persisted "$eth_interface" && ! diff -q <(build_canonical_args) "$(persist_file "$eth_interface")" &>/dev/null; then
         echo "Note: $eth_interface has different persisted rules that will be re-applied at boot. Add --persist to replace them."
     fi
 }
