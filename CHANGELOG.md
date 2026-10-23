@@ -1,3 +1,10 @@
+CHANGELOG 1.25
+- Added --container (Docker and Podman), --netns and --pid to apply, query, list (--show-interfaces), snapshot and roll back rules inside a container or network namespace instead of the whole host
+- State, snapshots and timed rollbacks are kept per namespace; snapshots record their namespace and must be restored in the same one; --persist is refused inside namespaces
+- Suggested commands (rollback, restore, query) include the namespace option when one is used
+- Interfaces are listed with ip instead of /sys/class/net, which shows the host's devices inside a namespace
+- Added USAGE.md with detailed examples of every feature, and more examples in the README
+
 CHANGELOG 1.24
 - Added --show-interfaces to list interfaces with their type (ethernet, bond, WireGuard, ...), IPv4 address and Latency Ninja status (rules, persistence, timed rollback); works without root. Based on a contribution by @scopey (#46)
 - README lists the required packages per distribution (contributed by @scopey in #46) and notes that git is only needed for --update

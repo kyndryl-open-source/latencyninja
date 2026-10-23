@@ -41,6 +41,8 @@ extract_netem_details() {
 
 # Function to query current tc rules
 query(){    
+    in_namespace && echo -e "Namespace: $LATENCYNINJA_NETNS_DESC\n"
+
     # Extract all network devices
     devices=$(list_network_devices)
 

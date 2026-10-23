@@ -155,7 +155,10 @@ parse_arguments() {
         exit 0
     fi
 
-    [ "$persist" -eq 1 ] && check_persist_supported
+    if [ "$persist" -eq 1 ]; then
+        in_namespace && die "The --persist option isn't supported with --netns, --pid or --container: the namespace doesn't survive reboots or container restarts."
+        check_persist_supported
+    fi
     if [ -n "$duration" ]; then
         [ "$persist" -eq 1 ] && die "The --duration option cannot be combined with --persist."
         command -v systemd-run &>/dev/null && [ -d /run/systemd/system ] || die "The --duration option requires systemd."
@@ -326,6 +329,7 @@ display_params() {
 
     echo 
     echo "$stage network perturbations with the following parameters:" 
+    in_namespace && echo "  - Namespace: $LATENCYNINJA_NETNS_DESC"
     [ -n "$eth_interface" ] && echo "  - Interface: $eth_interface"   
     for sip in "${src_ip[@]}"; do
         [ -n "$sip" ] && echo "  - Source IP/Network: $sip"       
@@ -346,8 +350,8 @@ display_params() {
 
     if [ "$stage" = "Applied" ]; then
         echo
-        echo "To validate, run: $0 --query"
-        echo "To rollback, run: $0 --rollback --interface $eth_interface"
+        echo "To validate, run: $0 --query$(namespace_hint)"
+        echo "To rollback, run: $0 --rollback --interface $eth_interface$(namespace_hint)"
     fi
     echo 
 }

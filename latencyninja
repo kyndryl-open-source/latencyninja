@@ -35,9 +35,13 @@ script_dir="$(dirname "$script_path")"
 . "$script_dir/inc/persist_utils.sh"
 . "$script_dir/inc/profile_utils.sh"
 . "$script_dir/inc/schedule_utils.sh"
+. "$script_dir/inc/namespace_utils.sh"
 
 # Global main function
 main() {
+    # With --netns/--pid/--container, re-run inside the target network namespace
+    enter_namespace_if_requested "$@"
+
     # Listing interfaces doesn't need root or the other system checks
     for arg in "$@"; do
         [[ "$arg" == "--show-interfaces" ]] && { show_available_interfaces; exit 0; }
@@ -81,7 +85,7 @@ main() {
     save_runtime_state "$eth_interface"
     append_applied_values "$backup_file"
     log_execution "$log_file" "$@"
-    echo "Backup saved to: $backup_file (restore with: $0 --restore $backup_file)"
+    echo "Backup saved to: $backup_file (restore with: $0 --restore $backup_file$(namespace_hint))"
     echo "Log updated at: $log_file"
 
     [ -n "$duration" ] && schedule_rollback "$eth_interface" "$duration_seconds" "$backup_file"
