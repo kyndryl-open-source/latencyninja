@@ -44,6 +44,11 @@ bond_up() {
     ip link add bond0 type bond mode active-backup miimon 100
     for i in 0 1; do
         ip link add "lnb$i" type veth peer name "lnb${i}p"
+    done
+    # udev assigns new veths a MAC address asynchronously (MACAddressPolicy). If that happens after
+    # enslaving, the slave's MAC no longer matches the bond's and its traffic is dropped, so wait.
+    udevadm settle
+    for i in 0 1; do
         ip link set "lnb${i}p" netns "$ns"
         nsenter --net="/run/netns/$ns" ip link set "lnb${i}p" master lnbr0
         nsenter --net="/run/netns/$ns" ip link set "lnb${i}p" up
