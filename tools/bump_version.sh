@@ -42,7 +42,7 @@ if [ "$(printf '%s\n%s\n' "$base" "$new" | sort -V | tail -n1)" != "$new" ] || [
 fi
 
 if [ "$create_branch" -eq 1 ]; then
-    git switch -c "$new" origin/main
+    git switch -c "$new" --no-track origin/main
 fi
 
 echo "$new" > version.txt
