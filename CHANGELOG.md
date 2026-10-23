@@ -1,3 +1,6 @@
+CHANGELOG 1.27
+- Roadmap: added a Starlink profile (1.29), inter-AZ and cloud inter-region profiles (1.30), Starlink handover scenarios (1.31) and a Kubernetes sidecar image (2.0)
+
 CHANGELOG 1.26.1
 - --show-interfaces now requires root like every other command, so there is no exception to remember; it always shows persistence and timed rollbacks
 

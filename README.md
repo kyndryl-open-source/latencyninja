@@ -318,10 +318,10 @@ To update Latency Ninja to the lastest version, run:
 ## Roadmap
 - **1.27** Safety and automation: `--dry-run`, SSH lockout guard, JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
 - **1.28** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic.
-- **1.29** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`.
-- **1.30** Different conditions per destination on one interface and region matrices (`--matrix regions.json`).
-- **1.31** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows).
-- **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions, Kubernetes pod targeting.
+- **1.29** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
+- **1.30** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
+- **1.31** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
+- **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions. Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
 
 ## Contributing
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, tests and release process.
