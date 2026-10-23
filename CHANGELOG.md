@@ -4,6 +4,7 @@ CHANGELOG 1.26
 - Host snapshots (--save without --interface) include the rules of all containers and namespaces, and --restore re-enters each one
 - Runtime state and timers are keyed by the network namespace itself, so a namespace reached in different ways (e.g. --container and --pid) shares its state, and a target in the host namespace is treated as the host
 - Profiles with unknown keys are rejected
+- Commands suggested by Latency Ninja (rollback, query, restore) and all examples in the README, USAGE.md and templates consistently use sudo
 - Roadmap: planned versions moved by one (safety and automation is now 1.27)
 
 CHANGELOG 1.25

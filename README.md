@@ -72,13 +72,13 @@ Add executible permissions:
 
 See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
 
-      ./latencyninja [--container <name> | --netns <name> | --pid <pid>]
-                     --interface <interface>
-                     --dst_ip <destination IP/Network:port~port~port>
-                     [--src_ip <source IP/network>]
-                     [--direction <direction>]
-                     [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]
-                     [--profile <name>] [--duration <time>] [--persist]
+      sudo ./latencyninja [--container <name> | --netns <name> | --pid <pid>]
+                          --interface <interface>
+                          --dst_ip <destination IP/Network:port~port~port>
+                          [--src_ip <source IP/network>]
+                          [--direction <direction>]
+                          [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]
+                          [--profile <name>] [--duration <time>] [--persist]
 
       Options:
 
@@ -181,12 +181,12 @@ Save the current rules, experiment, and put everything back:
 
 List interfaces and check what is applied:
 
-      ./latencyninja --show-interfaces
+      sudo ./latencyninja --show-interfaces
       sudo ./latencyninja --query
 
 To use a JSON file using the --json option, run:
 
-      ./latencyninja \
+      sudo ./latencyninja \
                   --json file.json
 
 
@@ -208,17 +208,17 @@ Make sure the JSON file is formated using the following template:
             "duration": "15m"
       }
 
-To list the interfaces you can apply rules to, with their type (ethernet, bond, WireGuard, ...), IPv4 address and whether Latency Ninja rules, persistence or a timed rollback are active, run (root is only needed to see persistence and timed rollbacks):
+To list the interfaces you can apply rules to, with their type (ethernet, bond, WireGuard, ...), IPv4 address and whether Latency Ninja rules, persistence or a timed rollback are active, run (it also works without `sudo`, but then doesn't show persistence and timed rollbacks):
 
-      ./latencyninja --show-interfaces
+      sudo ./latencyninja --show-interfaces
 
 To display current network perturbations rules, run:
 
-      ./latencyninja --query
+      sudo ./latencyninja --query
 
 To roll back previously applied network perturbations, run:
 
-      ./latencyninja \
+      sudo ./latencyninja \
                   --interface eth0 \
                   --rollback
 
@@ -228,7 +228,7 @@ Every option that applies rules is supported, including `persist` (`true`/`false
 
 Limit the bandwidth of the targeted traffic with `--rate`. Units are `bit`, `kbit`, `mbit`, `gbit` (bits per second) or `bps`, `kbps`, `mbps`, `gbps` (bytes per second). Unlike latency, which is split between ingress and egress when using `--direction both`, the rate applies to each direction:
 
-      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --rate 2mbit
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --rate 2mbit
 
 ## Profiles
 
@@ -247,8 +247,8 @@ Profiles apply a realistic combination of conditions in one option. List them wi
 
 Options given explicitly take precedence over the profile's values:
 
-      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g
-      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g --latency 150
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --profile 4g --latency 150
 
 Add your own profiles as JSON files in `/etc/latencyninja/profiles/<name>.json`, using the same keys as `--json` plus a `description`. A custom profile with the same name as a built-in one replaces it. Snapshots and persisted rules store the resolved values, so editing a profile later doesn't change them.
 
@@ -256,7 +256,7 @@ Add your own profiles as JSON files in `/etc/latencyninja/profiles/<name>.json`,
 
 Use `--duration` to apply rules for a limited time, for example during a chaos experiment or to stay safe on a remote machine:
 
-      ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --latency 200 --duration 15m
+      sudo ./latencyninja --interface eth0 --dst_ip 192.168.100.123 --latency 200 --duration 15m
 
 When the time is up, the interface is restored from the backup taken just before the rules were applied: if it had no rules it is rolled back, and if it had earlier rules those are re-applied. `--query` shows pending rollbacks; `--rollback` ends the rules earlier, and applying new rules to the interface cancels its pending rollback. Durations accept `s`, `m`, `h` and `d` (default seconds). Timed rollback uses a systemd timer, so it requires systemd and can't be combined with `--persist`.
 
@@ -264,12 +264,12 @@ When the time is up, the interface is restored from the backup taken just before
 
 Save the rules currently applied by Latency Ninja on all interfaces (or a single one with `--interface`):
 
-      ./latencyninja --save /root/before-test.snap
+      sudo ./latencyninja --save /root/before-test.snap
 
 Restore them later. Interfaces in scope that have rules but weren't in the snapshot are rolled back, so restoring a snapshot taken before any rules were applied returns the system to a clean state:
 
-      ./latencyninja --restore /root/before-test.snap
-      ./latencyninja --restore /root/before-test.snap --interface eth0   # only eth0
+      sudo ./latencyninja --restore /root/before-test.snap
+      sudo ./latencyninja --restore /root/before-test.snap --interface eth0   # only eth0
 
 Every time rules are applied, a snapshot of the previous state is written to the backup directory (`--backup`, default `/tmp`). Restoring it undoes that change; the exact command is printed after each run.
 
@@ -279,7 +279,7 @@ Snapshots are plain text with one argument per line and are never executed by a 
 
 By default rules are lost at reboot or when an interface is re-created. Add `--persist` to keep them:
 
-      ./latencyninja --interface wg0 --dst_ip 10.30.0.2 --latency 50 --persist
+      sudo ./latencyninja --interface wg0 --dst_ip 10.30.0.2 --latency 50 --persist
 
 The configuration is saved in `/etc/latencyninja/persist/` and a udev rule starts `latencyninja@<interface>.service` each time the interface appears: at boot, and whenever it is re-created (e.g. `wg-quick down/up`, NetworkManager re-creating a bond). Rules already survive a plain link down/up. The unit runs Latency Ninja from its current location, so re-run with `--persist` if you move it.
 
@@ -305,7 +305,7 @@ Each interface uses its own pair of `ifb` devices (`lni-<interface>` for ingress
 
 To update Latency Ninja to the lastest version, run:
 
-    ./latencyninja --update
+    sudo ./latencyninja --update
 
 ## Warning
 - Changes made by Latency Ninja do not persist after a reboot or when an interface is re-created unless `--persist` is used.

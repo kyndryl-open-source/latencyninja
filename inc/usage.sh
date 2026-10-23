@@ -22,7 +22,7 @@ about() {
     echo 
     echo "Usage:"
     echo
-    echo "  $0 --interface <interface>"
+    echo "  sudo $0 --interface <interface>"
     echo "          --dst_ip <destination_ip/destination_network:port>"
     echo "          [--src_ip <source_ip/destination_network>]"
     echo "          [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]"
@@ -84,7 +84,7 @@ usage() {
     echo
     echo "Latency Ninja $current_version"
     echo "Simulate network perturbations for testing and optimization."
-    echo "Usage: $0 --interface <interface> --dst_ip <destination> [options]"
+    echo "Usage: sudo $0 --interface <interface> --dst_ip <destination> [options]"
     echo
     echo "Options:"
     echo "  -h, --help        Display help message."

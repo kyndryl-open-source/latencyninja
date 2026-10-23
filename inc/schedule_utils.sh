@@ -42,7 +42,7 @@ schedule_rollback() {
     mkdir -p "$state_dir" && chmod 700 "$state_dir"
     echo $(( $(date +%s) + seconds )) > "$state_dir/$interface.expires"
     echo "Rollback of $interface scheduled at $(date -d "+${seconds} seconds" '+%Y-%m-%d %H:%M:%S') ($unit.timer)."
-    echo "To end earlier, run: $0 --rollback --interface $interface$(namespace_hint)"
+    echo "To end earlier, run: sudo $0 --rollback --interface $interface$(namespace_hint)"
 }
 
 # Function to cancel the pending timed rollback of an interface

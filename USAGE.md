@@ -55,17 +55,17 @@ Applying new rules to an interface replaces the rules already on it. Each run pr
       - Direction: both
       - Latency: 50 ms
 
-    To validate, run: ./latencyninja --query
-    To rollback, run: ./latencyninja --rollback --interface eth0
+    To validate, run: sudo ./latencyninja --query
+    To rollback, run: sudo ./latencyninja --rollback --interface eth0
 
-    Backup saved to: /tmp/latencyninja_tc_backup_20261023_165052_375560 (restore with: ./latencyninja --restore /tmp/latencyninja_tc_backup_20261023_165052_375560)
+    Backup saved to: /tmp/latencyninja_tc_backup_20261023_165052_375560 (restore with: sudo ./latencyninja --restore /tmp/latencyninja_tc_backup_20261023_165052_375560)
     Log updated at: /tmp/latencyninja.log
 
 ## Finding the right interface
 
-List the interfaces rules can be applied to, with their type, IPv4 address and current Latency Ninja state. This doesn't require root (only the persistence and timed rollback information does):
+List the interfaces rules can be applied to, with their type, IPv4 address and current Latency Ninja state. It also works without `sudo`, but then doesn't show persistence and timed rollbacks:
 
-    ./latencyninja --show-interfaces
+    sudo ./latencyninja --show-interfaces
 
     INTERFACE        STATE    TYPE                           IPV4                 LATENCY NINJA
     eth0             UP       ethernet                       192.168.5.15/24      -

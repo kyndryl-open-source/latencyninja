@@ -86,7 +86,7 @@ main() {
     save_runtime_state "$eth_interface"
     append_applied_values "$backup_file"
     log_execution "$log_file" "$@"
-    echo "Backup saved to: $backup_file (restore with: $0 --restore $backup_file$(namespace_hint))"
+    echo "Backup saved to: $backup_file (restore with: sudo $0 --restore $backup_file$(namespace_hint))"
     echo "Log updated at: $log_file"
 
     [ -n "$duration" ] && schedule_rollback "$eth_interface" "$duration_seconds" "$backup_file"

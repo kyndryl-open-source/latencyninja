@@ -309,8 +309,8 @@ display_params() {
 
     if [ "$stage" = "Applied" ]; then
         echo
-        echo "To validate, run: $0 --query$(namespace_hint)"
-        echo "To rollback, run: $0 --rollback --interface $eth_interface$(namespace_hint)"
+        echo "To validate, run: sudo $0 --query$(namespace_hint)"
+        echo "To rollback, run: sudo $0 --rollback --interface $eth_interface$(namespace_hint)"
     fi
     echo 
 }

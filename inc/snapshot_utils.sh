@@ -147,7 +147,7 @@ write_snapshot() {
     {
         echo "# Latency Ninja snapshot"
         echo "# Date: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "# Restore with: $script_path --restore $file$(namespace_hint)"
+        echo "# Restore with: sudo $script_path --restore $file$(namespace_hint)"
         echo "[scope $scope]"
         in_namespace && echo "[namespace $LATENCYNINJA_NETNS_REF]"
         for interface in $(active_interfaces); do
