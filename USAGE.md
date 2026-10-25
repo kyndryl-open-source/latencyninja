@@ -17,6 +17,7 @@ Detailed examples of every Latency Ninja feature. For installation and an overvi
 - [Rolling back](#rolling-back)
 - [Timed rollback](#timed-rollback)
 - [SSH lockout guard](#ssh-lockout-guard)
+- [Dry run](#dry-run)
 - [Check and clean](#check-and-clean)
 - [Snapshots and backups](#snapshots-and-backups)
 - [Persistence across reboots and interface restarts](#persistence-across-reboots-and-interface-restarts)
@@ -314,6 +315,25 @@ Your options:
 - Add `--allow-ssh` (or `"allow_ssh": true` in a JSON file) to apply the rules anyway.
 
 The check is conservative. A session counts as affected when its client address is covered by `--dst_ip` (or `--src_ip`) and the local address by the other side, with port 0 (any), the client's port or the SSH server port. It only looks at sessions whose route goes through the interface being shaped, so rules on a different interface than the one carrying your session aren't blocked. Restoring snapshots (including timed rollbacks) and re-applying persisted rules don't use the guard. Inside `--container`/`--netns`, only SSH sessions in that namespace are considered.
+
+## Dry run
+
+`--dry-run` takes the same options as a normal run, validates them in the same way (including the SSH lockout guard), and then prints the `ip` and `tc` commands that would be run instead of running them:
+
+    $ sudo ./latencyninja -i eth0 -d 10.0.0.5:80 -l 40 -x 1 --dry-run
+
+    Would apply network perturbations with the following parameters:
+      ...
+    Commands that would be run:
+      modprobe ifb
+      tc filter del dev eth0 parent 1:
+      ...
+      tc qdisc add dev lne-eth0 parent 1:1 handle 20:0 netem delay 20ms loss 1%
+
+    Dry run: nothing was changed, no backup was taken and no log entry was written.
+    To apply, run: sudo ./latencyninja -i eth0 -d 10.0.0.5:80 -l 40 -x 1
+
+Nothing is changed: existing rules, backups, logs, persistence and timers are left alone. The commands begin with the ones that remove any existing Latency Ninja rules on the interface, as a real run does first. `--dry-run` only previews applying rules, so it can't be combined with `--rollback`, `--check`, `--clean`, `--save`, `--restore` or `--apply-persisted`. It still needs root, because the checks read the interface and its addresses.
 
 ## Check and clean
 

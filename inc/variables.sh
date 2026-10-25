@@ -52,8 +52,8 @@ declare -g profile="" profiles_dir="$script_dir/profiles" user_profiles_dir="/et
 # Timed rollback
 declare -g duration="" duration_seconds="" timed_rollback_file=""
 
-# SSH lockout guard bypass, and the --check/--clean modes
-declare -g allow_ssh=0 check_mode=0 clean_mode=0 assume_yes=0
+# SSH lockout guard bypass, the --check/--clean modes and --dry-run
+declare -g allow_ssh=0 check_mode=0 clean_mode=0 assume_yes=0 dry_run=0
 
 # Function to check full paths of commands
 find_command_paths() {

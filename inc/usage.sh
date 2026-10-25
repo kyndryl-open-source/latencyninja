@@ -67,6 +67,7 @@ about() {
     echo "  -p, --profile <name>                            Apply a network profile (e.g., 3g, 4g, satellite). Explicit options override its values."
     echo "  --profiles                                      List the available profiles."
     echo "  -t, --duration <time>                           Automatically roll back after a duration (e.g., 30s, 10m, 2h), restoring the previous rules."
+    echo "  --dry-run                                       Show what would be applied (the tc/ip commands) without changing anything."
     echo "  --allow-ssh                                     Apply rules even if they affect your SSH session (refused by default unless --duration is used)."
     echo
     echo "  --json <path/file.json>                         Path to JSON file."
@@ -119,6 +120,7 @@ usage() {
     echo "  -b, --rate        Bandwidth limit per direction (e.g., 2mbit)."
     echo "  -p, --profile     Network profile (e.g., 3g, 4g, satellite). --profiles lists them."
     echo "  -t, --duration    Automatic rollback after a duration (e.g., 10m)."
+    echo "  --dry-run         Show what would be applied, change nothing."
     echo "  --allow-ssh       Apply rules even if they affect your SSH session."
     echo
     echo "  --json            Path to JSON file."

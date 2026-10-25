@@ -26,6 +26,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 🗂️ Profiles: Ready-made network profiles (3G, 4G, 5G, satellite, cross-region links, lossy Wi-Fi) and your own.
 * ⏲️ Timed rollback: Automatically restore the previous rules after a duration.
 * 🛡️ SSH lockout guard: Refuses rules that would affect your own SSH session, unless they roll back automatically.
+* 👀 Dry run: `--dry-run` shows the exact `tc`/`ip` commands that would be run, without changing anything.
 * 🧹 Check and clean: `--check` finds leftovers and invalid settings, `--clean` removes them. Inputs are validated and normalized before anything is applied.
 * 📦 Containers: Target a single Docker or Podman container, a network namespace or a process instead of the whole host.
 
@@ -338,11 +339,11 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- **1.27** Safety and automation: `--dry-run`, JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
-- **1.28** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic.
-- **1.29** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
-- **1.30** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
-- **1.31** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
+- **1.29** Safety and automation: JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
+- **1.30** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic.
+- **1.31** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
+- **1.32** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
+- **1.33** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
 - **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions. Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
 
 ## Contributing
