@@ -26,6 +26,10 @@ get_arguments() {
             -v|--version) version; exit 0;;
             -q|--query) query; exit 0 ;; 
             --show-interfaces) show_available_interfaces; exit 0 ;;
+            --check) check_mode=1; shift ;;
+            --clean) clean_mode=1; shift ;;
+            --yes) assume_yes=1; shift ;;
+            --allow-ssh) allow_ssh=1; shift ;;
             -r|--rollback) rollback_required=1; shift;;
             -i|--interface) process_arg eth_interface interface_provided "$@"; shift 2 ;;
             -s|--src_ip) process_arg validate_src_ip "" "$@"; shift 2 ;;
@@ -80,11 +84,23 @@ process_arg() {
 
 # Function to parse arguments
 parse_arguments() {
+    # --check and --clean audit Latency Ninja's own state and don't apply rules
+    if [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ]; then
+        [ -n "$json_file$eth_interface$src_ip_arg$dst_ip_arg$latency$jitter$packet_loss$duplicate$corrupt$reorder$rate$profile$duration$save_file$restore_file$apply_persisted" ] || [ "$persist" -eq 1 ] || [ "$rollback_required" -eq 1 ] &&
+            die "The --check and --clean options can't be combined with options that apply, roll back or restore rules."
+        run_check_clean
+        exit $?
+    fi
+
     # Options from the JSON file override the same options given on the command line
     [ -n "$json_file" ] && load_json_file "$json_file"
+    normalize_parameters
 
     # Fill in parameters that weren't given explicitly from the selected profile
-    [ -n "$profile" ] && load_profile "$profile"
+    if [ -n "$profile" ]; then
+        load_profile "$profile"
+        normalize_parameters
+    fi
 
     # Validate the interface if one was given to scope --save/--restore
     if [ -n "$eth_interface" ] && { [ -n "$save_file" ] || [ -n "$restore_file" ]; }; then
@@ -159,14 +175,30 @@ parse_arguments() {
     fi        
 }
 
-# Function to validate arguments
-validate_arguments() {    
-    for sip in "${src_ip[@]}"; do 
-        [ -n "$sip" ] && validate_ip "$sip" "src_ip"
+# Function to remove the spaces around a value and set it in trimmed_value
+trim_value() {
+    trimmed_value="${1#"${1%%[![:space:]]*}"}"
+    trimmed_value="${trimmed_value%"${trimmed_value##*[![:space:]]}"}"
+}
+
+# Function to clean up the values given by the user (command line, JSON file or profile) before they are
+# validated: spaces around them are removed, and values that aren't case sensitive are lowercased
+normalize_parameters() {
+    local name
+    for name in eth_interface profile latency jitter packet_loss duplicate corrupt reorder; do
+        trim_value "${!name}"
+        declare -g "$name=$trimmed_value"
     done
-    for dip in "${dst_ip[@]}"; do 
-        [ -n "$dip" ] && validate_ip "$dip" "dst_ip"
+    for name in direction rate duration; do
+        trim_value "${!name}"
+        declare -g "$name=${trimmed_value,,}"
     done
+}
+
+# Function to validate the parameters and replace them with their normalized form
+validate_arguments() {
+    normalize_ip_list src
+    normalize_ip_list dst
     local param
     for param in latency jitter packet_loss duplicate corrupt reorder; do
         [ -n "${!param}" ] && check_numeric "$param"
@@ -176,14 +208,39 @@ validate_arguments() {
         # die() inside $(...) only exits the subshell, so propagate the failure
         duration_seconds=$(parse_duration "$duration") || { echo "$duration_seconds"; exit 1; }
     fi
+    warn_suspicious_parameters
 }
 
-# Function to validate and normalize a numeric parameter in place
+# Function to warn about combinations that are accepted but probably not what was intended
+warn_suspicious_parameters() {
+    if [ -n "$jitter" ] && [ -n "$latency" ] && awk -v j="$jitter" -v l="$latency" 'BEGIN{exit !(j>l)}'; then
+        echo "Warning: the jitter ($jitter ms) is larger than the latency ($latency ms)." >&2
+    fi
+    if [ -n "$reorder" ] && [ -z "$latency" ]; then
+        echo "Warning: --reorder has no effect without --latency, packets are only reordered when some are delayed." >&2
+    fi
+}
+
+# Function to validate and normalize a numeric parameter in place. Spaces and the unit (ms for latency and
+# jitter, % for the percentages) are accepted and removed; the result has no leading or trailing zeros.
 check_numeric() {
     local name="$1"
-    local value
-    value=$(validate_numeric "${!name}" "$name") || { echo "$value"; exit 1; }
-    declare -g "$name=$value"
+    local value="${!name}" unit="%" max=100
+    case "$name" in
+        latency|jitter) unit="ms"; max="" ;;
+    esac
+
+    trim_value "$value"
+    value="${trimmed_value,,}"
+    trim_value "${value%"$unit"}"
+    value="$trimmed_value"
+    if ! [[ "$value" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] || ! awk -v v="$value" 'BEGIN{exit !(v>0)}'; then
+        die "Invalid $name format. Use a positive numeric value for $name."
+    fi
+    if [ -n "$max" ] && ! awk -v v="$value" -v m="$max" 'BEGIN{exit !(v<=m)}'; then
+        die "Invalid $name format. $name is a percentage and can't be more than $max."
+    fi
+    declare -g "$name=$(awk -v v="$value" 'BEGIN{OFMT="%.10g"; print v+0}')"
 }
 
 # Function to validate a bandwidth rate in tc units (e.g. 512kbit, 2mbit, 1gbit, 10mbps)
@@ -212,75 +269,112 @@ validate_interface() {
     fi
 }
 
-# Function to validate numeric values
-validate_numeric() {
-    local val="${1//[^0-9.]}"
-    awk -v val="$val" 'BEGIN{if(val<=0) exit 1; print val}' || die "Invalid $2 format. Use a positive numeric value for $2."
-}
-
-# Function to process destination Source IP argument
+# Function to process the --src_ip argument
 validate_src_ip() {
-    local entries="$1"
-    src_ip_arg="${src_ip_arg:+$src_ip_arg,}$entries"
-
-    IFS=',' read -ra src_entries <<< "$entries"
-    for entry in "${src_entries[@]}"; do
-        if [[ "$entry" == *":"* ]]; then
-            ip=$(echo "$entry" | cut -d':' -f1)
-            ports=$(echo "$entry" | cut -d':' -f2 | tr '~' ' ')
-            for port in $ports; do
-                src_ip+=("$ip:$port")
-            done
-        else
-            src_ip+=("$entry:0")
-        fi
-    done
+    add_ip_entries src "$1"
 }
 
-# Function to process destination Destination IP argument
+# Function to process the --dst_ip argument
 validate_dst_ip() {
-    local entries="$1"
-    dst_ip_arg="${dst_ip_arg:+$dst_ip_arg,}$entries"
+    add_ip_entries dst "$1"
+}
 
-    IFS=',' read -ra dst_entries <<< "$entries"
-    for entry in "${dst_entries[@]}"; do
-        if [[ "$entry" == *":"* ]]; then
-            ip=$(echo "$entry" | cut -d':' -f1)
-            ports=$(echo "$entry" | cut -d':' -f2 | tr '~' ' ')
-            for port in $ports; do
-                dst_ip+=("$ip:$port")
+# Function to add the entries of --src_ip or --dst_ip ("ip[/len][:port[~port...]]", separated by commas) to the
+# src_ip or dst_ip array as "ip[/len]:port" (port 0 means any). Spaces around entries are removed. The values themselves are
+# validated later by normalize_ip_list; nothing is expanded by the shell or silently dropped here.
+add_ip_entries() {
+    local kind="$1" entries="$2"
+    local -n list="${kind}_ip" raw="${kind}_ip_arg"
+    local items=() ports=() entry ip port
+
+    raw="${raw:+$raw,}$entries"
+    IFS=',' read -ra items <<< "$entries"
+    for entry in "${items[@]}"; do
+        trim_value "$entry"
+        entry="$trimmed_value"
+        [ -z "$entry" ] && continue
+        if [[ "$entry" == *:* ]]; then
+            ip="${entry%%:*}"
+            # The sentinel keeps empty ports ("ip:", "ip:80~") from being dropped by read
+            IFS='~' read -ra ports <<< "${entry#*:}~x"
+            unset 'ports[${#ports[@]}-1]'
+            for port in "${ports[@]}"; do
+                list+=("$ip:$port")
             done
         else
-            dst_ip+=("$entry:0")
+            list+=("$entry:0")
         fi
     done
 }
 
-# Function to validate CIDR IP values
-validate_ip() {
-    local value="$1"
-    local name="$2"
-    
-    # Split IP and port
-    local ip="${value%%:*}"  # everything before the first colon
-    local port="${value#*:}" # everything after the first colon
+# Function to validate one IPv4 address or network with an optional port ("ip", "ip/len", "ip:port",
+# "ip/len:port") and set normalized_ip_entry to its canonical form: no leading zeros (so 010 isn't
+# mistaken for octal) in the octets, the prefix length or the port. Nothing is evaluated before the
+# value is known to be numeric.
+normalize_ip_entry() {
+    local value="$1" name="$2"
+    local address="${value%%:*}" port="" length="" octets=() octet
 
-    # Regex to match IP
-    local ip_pattern="^([0-9]{1,3}\.){3}[0-9]{1,3}"
-    # Regex to optionally match CIDR
-    local cidr_pattern="(/([0-2]?[0-9]|3[0-2]))?$"
-
-    # Validate the IP part
-    if ! [[ "$ip" =~ ${ip_pattern}${cidr_pattern} ]]; then
+    if [[ "$value" == *:* ]]; then
+        port="${value#*:}"
+        if ! [[ "$port" =~ ^[0-9]{1,5}$ ]] || [ "$((10#$port))" -gt 65535 ]; then
+            die "Invalid $name format for port. Port '$port' is not in the range 0-65535."
+        fi
+        port=$((10#$port))
+    fi
+    if [[ "$address" == */* ]]; then
+        length="${address#*/}"
+        address="${address%%/*}"
+        if ! [[ "$length" =~ ^[0-9]{1,2}$ ]] || [ "$((10#$length))" -gt 32 ]; then
+            die "Invalid $name format for IP. Please use a valid IPv4 address or CIDR notation IPv4 network for $name and $value"
+        fi
+        length=$((10#$length))
+    fi
+    if ! [[ "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
         die "Invalid $name format for IP. Please use a valid IPv4 address or CIDR notation IPv4 network for $name and $value"
     fi
+    IFS=. read -ra octets <<< "$address"
+    for octet in "${octets[@]}"; do
+        [ "$((10#$octet))" -le 255 ] || die "Invalid $name format for IP. Please use a valid IPv4 address or CIDR notation IPv4 network for $name and $value"
+    done
+    normalized_ip_entry="$((10#${octets[0]})).$((10#${octets[1]})).$((10#${octets[2]})).$((10#${octets[3]}))${length:+/$length}${port:+:$port}"
+}
 
-    # Validate the port if it exists (if value contains a colon)
-    if [[ "$value" == *":"* ]]; then
-        if ((port < 0 || port > 65535)); then
-            die "Invalid $name format for port. Port $port is not in the range 0-65535."
-        fi
-    fi
+# Function to validate the src_ip or dst_ip entries, replace them with their normalized form and remove
+# duplicates. The raw argument kept for persistence and snapshots is rebuilt from the cleaned entries.
+normalize_ip_list() {
+    local kind="$1" entry
+    local -n list="${kind}_ip" raw="${kind}_ip_arg"
+    local -A seen=()
+    local cleaned=()
+
+    for entry in "${list[@]}"; do
+        [ -z "$entry" ] && continue
+        normalize_ip_entry "$entry" "${kind}_ip"
+        [ -n "${seen[$normalized_ip_entry]+set}" ] && continue
+        seen[$normalized_ip_entry]=1
+        cleaned+=("$normalized_ip_entry")
+    done
+    list=("${cleaned[@]}")
+    [ -n "$raw" ] && raw=$(join_ip_entries "${cleaned[@]}")
+}
+
+# Function to join "ip:port" entries back into the --src_ip/--dst_ip syntax (ip1:80~443,ip2)
+join_ip_entries() {
+    local entry address port joined="" order=()
+    local -A address_ports=()
+
+    for entry in "$@"; do
+        address="${entry%:*}"
+        port="${entry##*:}"
+        [ -z "${address_ports[$address]+set}" ] && order+=("$address")
+        address_ports[$address]+="${address_ports[$address]:+~}$port"
+    done
+    for address in "${order[@]}"; do
+        joined+="${joined:+,}$address"
+        [ "${address_ports[$address]}" != "0" ] && joined+=":${address_ports[$address]}"
+    done
+    echo "$joined"
 }
 
 # Function to display parameters and results

@@ -276,7 +276,8 @@ restore_snapshot() {
             continue
         fi
         echo "  - $entry: re-applying ${args[*]}"
-        "$script_path" "${ref_options[@]}" "${args[@]}" </dev/null >/dev/null || { echo "    Failed to re-apply rules for $entry"; failed=1; }
+        # The SSH lockout guard is bypassed: a snapshot brings back rules that were applied (and accepted) before
+        "$script_path" "${ref_options[@]}" "${args[@]}" --allow-ssh </dev/null >/dev/null || { echo "    Failed to re-apply rules for $entry"; failed=1; }
     done
 
     [ "$failed" -eq 0 ] && echo "Snapshot restored." || die "Snapshot restored with errors."

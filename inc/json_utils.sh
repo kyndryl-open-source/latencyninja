@@ -14,11 +14,11 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Keys accepted in --json files: every option that applies rules. Values can be strings or numbers,
-# src_ip/dst_ip can also be arrays, and persist is a boolean. Values in the file override the same
+# src_ip/dst_ip can also be arrays, and persist and allow_ssh are booleans. Values in the file override the same
 # options given on the command line. container/netns/pid are handled before entering the namespace
 # (see json_namespace_target in namespace_utils.sh).
 declare -g -a json_keys=(interface src_ip dst_ip direction latency jitter packet_loss duplicate corrupt reorder rate
-    profile duration persist backup logging container netns pid)
+    profile duration persist allow_ssh backup logging container netns pid)
 
 # Function to load the options from a JSON file
 load_json_file() {
@@ -35,9 +35,9 @@ load_json_file() {
     wrong_type=$($jq_path -r '[to_entries[] | select(
             (.key == "src_ip" or .key == "dst_ip") as $list
             | (.value | type) as $t
-            | ($t == "object") or ($t == "array" and ($list | not)) or ($t == "boolean" and .key != "persist")
+            | ($t == "object") or ($t == "array" and ($list | not)) or ($t == "boolean" and .key != "persist" and .key != "allow_ssh")
         ) | .key] | join(", ")' "$file")
-    [ -n "$wrong_type" ] && die "Invalid value type for $wrong_type in JSON file $file. Use strings or numbers (arrays for src_ip/dst_ip, true/false for persist)."
+    [ -n "$wrong_type" ] && die "Invalid value type for $wrong_type in JSON file $file. Use strings or numbers (arrays for src_ip/dst_ip, true/false for persist and allow_ssh)."
 
     for key in "${json_keys[@]}"; do
         value=$($jq_path -r --arg k "$key" '.[$k] | if . == null then empty elif type == "array" then map(tostring) | join(",") else tostring end' "$file")
@@ -46,11 +46,11 @@ load_json_file() {
             interface) eth_interface="$value"; interface_provided=1 ;;
             src_ip) validate_src_ip "$value" ;;
             dst_ip) validate_dst_ip "$value" ;;
-            persist)
+            persist|allow_ssh)
                 case "$value" in
-                    true) persist=1 ;;
+                    true) [ "$key" = "persist" ] && persist=1 || allow_ssh=1 ;;
                     false) ;;
-                    *) die "Invalid value for persist in JSON file $file: $value. Use true or false." ;;
+                    *) die "Invalid value for $key in JSON file $file: $value. Use true or false." ;;
                 esac ;;
             backup) backup_dir="$value" ;;
             logging) log_file="$value" ;;

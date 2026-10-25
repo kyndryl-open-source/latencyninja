@@ -25,6 +25,8 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 📶 Bandwidth: Limit throughput per direction to emulate slow links.
 * 🗂️ Profiles: Ready-made network profiles (3G, 4G, 5G, satellite, cross-region links, lossy Wi-Fi) and your own.
 * ⏲️ Timed rollback: Automatically restore the previous rules after a duration.
+* 🛡️ SSH lockout guard: Refuses rules that would affect your own SSH session, unless they roll back automatically.
+* 🧹 Check and clean: `--check` finds leftovers and invalid settings, `--clean` removes them. Inputs are validated and normalized before anything is applied.
 * 📦 Containers: Target a single Docker or Podman container, a network namespace or a process instead of the whole host.
 
 ## Table of Contents
@@ -125,6 +127,9 @@ See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
                                                       Persisted rules are removed with --rollback.
       --save <file>                                   Save a restorable snapshot of the current rules (all interfaces, or only --interface).
       --restore <file>                                Restore the rules from a snapshot or backup file (all interfaces in it, or only --interface).
+      --check                                         Check for leftovers (orphaned ifb devices, stale state, broken persisted rules, old backups) and invalid profiles. Exits 1 if any are found.
+      --clean                                         Check, then remove the leftovers after confirmation (--yes skips the confirmation). Active rules are never touched.
+      --allow-ssh                                     Apply rules even if they affect your SSH session (refused by default unless --duration is used).
       --update                                        Checks and updates to the latest version from Github.
 
 ## Examples
@@ -260,6 +265,23 @@ Use `--duration` to apply rules for a limited time, for example during a chaos e
 
 When the time is up, the interface is restored from the backup taken just before the rules were applied: if it had no rules it is rolled back, and if it had earlier rules those are re-applied. `--query` shows pending rollbacks; `--rollback` ends the rules earlier, and applying new rules to the interface cancels its pending rollback. Durations accept `s`, `m`, `h` and `d` (default seconds). Timed rollback uses a systemd timer, so it requires systemd and can't be combined with `--persist`.
 
+## SSH Lockout Guard
+
+Rules that match the traffic of your own SSH session (packet loss, a low rate or a long delay towards your client) can make the session unusable, and with it the way to roll the rules back. Before applying rules, Latency Ninja looks for SSH sessions that reach the machine through the target interface and refuses rules that would affect them:
+
+      Error: These rules would also affect your SSH session from 10.0.0.9 on eth0 and could lock you out. ...
+
+Exclude your address from `--src_ip`/`--dst_ip`, add `--duration` so the rules roll back automatically (a warning is shown instead), or add `--allow-ssh` (`"allow_ssh": true` in JSON files) to apply them anyway. The check is conservative: a rule counts as matching when it covers the client address with port 0 (any), the client's port or the SSH server port. Restoring snapshots and persisted rules is not blocked.
+
+## Check and Clean
+
+Latency Ninja leaves some state behind that can get out of step with the system: ifb devices, saved rules, timers, persisted rules, backups. `--check` looks for it without changing anything, and `--clean` removes what it can after you confirm:
+
+      sudo ./latencyninja --check
+      sudo ./latencyninja --clean          # asks first; --yes skips the question
+
+Active rules, persisted rules that are valid and pending timed rollbacks are never touched. See [USAGE.md](USAGE.md#check-and-clean) for what is checked.
+
 ## Snapshots and Backups
 
 Save the rules currently applied by Latency Ninja on all interfaces (or a single one with `--interface`):
@@ -316,7 +338,7 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- **1.27** Safety and automation: `--dry-run`, SSH lockout guard, JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
+- **1.27** Safety and automation: `--dry-run`, JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
 - **1.28** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic.
 - **1.29** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
 - **1.30** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.

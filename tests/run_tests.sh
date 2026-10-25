@@ -1117,6 +1117,220 @@ test_namespace_aliases() {
     check "no namespace hint for the host" not_contains "$out" "--pid 1"
 }
 
+# ---------- tests: input validation and normalization ----------
+
+test_validation_normalization() {
+    local bad
+    for bad in abc50 1.2.3 1e3 "5 0" 5%; do
+        ln --interface "$dev" --dst_ip 10.10.0.2 --latency "$bad"
+        check "latency '$bad' rejected" contains "$out" "positive numeric value"
+    done
+    for bad in 101 150 1000; do
+        ln --interface "$dev" --dst_ip 10.10.0.2 --packet_loss "$bad"
+        check "packet_loss '$bad' rejected" contains "$out" "can't be more than 100"
+    done
+    for bad in 999.1.1.1 10.0.0.256 10.0.0.1/33 10.0.0.1:65536 10.0.0.1: 10.0.0.1:x; do
+        ln --interface "$dev" --dst_ip "$bad" --latency 10
+        check "dst_ip '$bad' rejected (exit $rc)" [ "$rc" -ne 0 ]
+    done
+    check "nothing applied by rejected values" not_contains "$(tc qdisc show dev $dev)" "prio"
+
+    # A port is never evaluated by bash
+    rm -f "$work_dir/pwned"; mkdir -p "$work_dir"
+    ln --interface "$dev" --dst_ip "10.10.0.2:a[\$(touch $work_dir/pwned)]" --latency 10
+    check "non-numeric port rejected" contains "$out" "not in the range"
+    check "port was not evaluated" [ ! -e "$work_dir/pwned" ]
+
+    # Units, spaces, case and leading zeros are cleaned up; the result is what is applied and stored
+    ln --interface "$dev" --dst_ip " 010.010.000.002 , 10.10.0.2 " --latency " 100ms " --packet_loss "0.5%" --direction EGRESS --rate " 50Mbit "
+    check "cleaned values apply (exit $rc)" [ "$rc" -eq 0 ]
+    local q; q=$(tc qdisc show dev lne-$dev)
+    check "latency 100ms" contains "$q" "delay 100ms"
+    check "packet loss 0.5%" contains "$q" "loss 0.5%"
+    check "rate applied" contains "$q" "rate 50Mbit"
+    ln --save "$work_dir/norm.snap"
+    check "leading zeros removed and duplicates dropped" grep -qx -- '10.10.0.2' "$work_dir/norm.snap"
+    check "no duplicate entry" not grep -q -- '10.10.0.2,' "$work_dir/norm.snap"
+    check "values stored normalized" grep -qx -- '0.5' "$work_dir/norm.snap"
+    ln --rollback --interface "$dev"
+
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 20 --jitter 50
+    check "jitter larger than latency warns" contains "$out" "Warning: the jitter (50 ms) is larger than the latency (20 ms)"
+    check "and still applies" contains "$(tc qdisc show dev lne-$dev)" "delay 10ms"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --reorder 5 --packet_loss 1
+    check "reorder without latency warns" contains "$out" "--reorder has no effect without --latency"
+
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"packet_loss\": 150 }" > "$work_dir/v1.json"
+    ln --json "$work_dir/v1.json"; check "JSON values are validated too" contains "$out" "can't be more than 100"
+    mkdir -p /etc/latencyninja/profiles
+    echo '{ "description": "Bad", "latency": "0" }' > /etc/latencyninja/profiles/lnbad.json
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile lnbad
+    check "profile values are validated too" contains "$out" "positive numeric value"
+    rm -f /etc/latencyninja/profiles/lnbad.json
+}
+
+# ---------- tests: SSH lockout guard ----------
+
+# Run latencyninja as if the command was started from an SSH session of 10.10.0.2 (reachable through ln0)
+ln_ssh() {
+    out=$(cd "$repo_dir" && SSH_CONNECTION="10.10.0.2 40000 10.10.0.1 22" ./latencyninja "$@" </dev/null 2>&1)
+    rc=$?
+}
+
+test_ssh_guard() {
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.2 --packet_loss 50
+    check "rules matching the SSH client refused (exit $rc)" [ "$rc" -ne 0 ]
+    check "explains the lockout" contains "$out" "would also affect your SSH session from 10.10.0.2"
+    check "offers the ways out" contains "$out" "--allow-ssh"
+    check "nothing applied" not_contains "$(tc qdisc show dev $dev)" "prio"
+
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.0/24 --latency 20
+    check "a network containing the client is refused too" contains "$out" "SSH session"
+
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.3 --packet_loss 50
+    check "rules for another host apply (exit $rc)" [ "$rc" -eq 0 ]
+    ln --rollback --interface "$dev"
+
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.2:80 --latency 20
+    check "a port that is not the session's applies (exit $rc)" [ "$rc" -eq 0 ]
+    ln --rollback --interface "$dev"
+
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.2:22 --latency 20
+    check "the SSH port is refused" contains "$out" "SSH session"
+
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.2 --packet_loss 50 --allow-ssh
+    check "--allow-ssh applies the rules (exit $rc)" [ "$rc" -eq 0 ]
+    check "rules are in place" contains "$(tc qdisc show dev lne-$dev)" "loss 50%"
+    ln --rollback --interface "$dev"
+
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"packet_loss\": 50, \"allow_ssh\": true }" > "$work_dir/ssh.json"
+    ln_ssh --json "$work_dir/ssh.json"
+    check "allow_ssh in a JSON file (exit $rc)" [ "$rc" -eq 0 ]
+    ln --rollback --interface "$dev"
+    echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"packet_loss\": 50, \"allow_ssh\": \"maybe\" }" > "$work_dir/ssh2.json"
+    ln --json "$work_dir/ssh2.json"
+    check "invalid allow_ssh rejected" contains "$out" "Invalid value for allow_ssh"
+
+    # Restoring brings back rules that were applied before, so it isn't blocked
+    ln --interface "$dev" --dst_ip 10.10.0.2 --packet_loss 50 --allow-ssh
+    ln --save "$work_dir/ssh.snap"
+    ln --rollback --interface "$dev"
+    out=$(cd "$repo_dir" && SSH_CONNECTION="10.10.0.2 40000 10.10.0.1 22" ./latencyninja --restore "$work_dir/ssh.snap" </dev/null 2>&1); rc=$?
+    check "restore is not blocked (exit $rc)" [ "$rc" -eq 0 ]
+    check "restored rules in place" contains "$(tc qdisc show dev lne-$dev)" "loss 50%"
+    ln --rollback --interface "$dev"
+
+    # A session that doesn't go through the shaped interface is not affected
+    out=$(cd "$repo_dir" && SSH_CONNECTION="10.40.0.2 40000 10.10.0.1 22" ./latencyninja --interface "$dev" --dst_ip 10.40.0.2 --packet_loss 50 </dev/null 2>&1); rc=$?
+    check "session over another interface (exit $rc)" [ "$rc" -eq 0 ]
+    ln --rollback --interface "$dev"
+}
+
+test_ssh_guard_duration() {
+    command -v systemd-run &>/dev/null && [ -d /run/systemd/system ] || return 77
+    ln_ssh --interface "$dev" --dst_ip 10.10.0.2 --packet_loss 50 --duration 1h
+    check "--duration makes it safe (exit $rc)" [ "$rc" -eq 0 ]
+    check "warns about the session" contains "$out" "affect your SSH session from 10.10.0.2"
+    check "rollback scheduled" contains "$out" "Rollback of $dev scheduled"
+    check "rules in place" contains "$(tc qdisc show dev lne-$dev)" "loss 50%"
+}
+
+# ---------- tests: --check and --clean ----------
+
+test_check_clean() {
+    modprobe ifb 2>/dev/null
+    local fixture_state="/run/latencyninja"
+
+    # Orphaned ifb device
+    ip link add lne-orphan0 type ifb
+    ln --check
+    check "--check exits 1 with a problem" [ "$rc" -eq 1 ]
+    check "orphaned ifb device reported" contains "$out" "ifb device lne-orphan0 is not used by any interface"
+    check "--check changes nothing" ip link show lne-orphan0
+    ln --clean
+    check "--clean without a terminal needs --yes" contains "$out" "use --yes"
+    check "and removes nothing" ip link show lne-orphan0
+    ln --clean --yes
+    check "--clean --yes exit code 0 or leftovers only (exit $rc)" [ "$rc" -le 1 ]
+    check "orphaned ifb device removed" not ip link show lne-orphan0
+
+    # Rules that are applied are not touched, and are not reported
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100
+    ln --check
+    check "active rules are not reported" not_contains "$out" "Rules on $dev"
+    check "their ifb devices are not reported" not_contains "$out" "ifb device lne-$dev"
+    ln --clean --yes
+    check "active rules survive --clean" contains "$(tc qdisc show dev lne-$dev)" "delay 50ms"
+    ping_stats 10.10.0.2; check "and still delay traffic (got $avg)" between "$avg" 90 130
+
+    # Rules redirecting to an ifb device that is gone
+    ip link delete lne-$dev
+    ln --check
+    check "dangling redirect reported" contains "$out" "Rules on $dev redirect egress traffic to lne-$dev, which no longer exists"
+    ln --clean --yes
+    check "interface rules removed" not_contains "$(tc qdisc show dev $dev)" "prio"
+    ln --check
+    check "nothing about $dev left" not_contains "$out" "Rules on $dev"
+
+    # Stale saved rules
+    mkdir -p "$fixture_state"
+    printf -- '--interface\nlnghost0\n--latency\n10\n' > "$fixture_state/lnghost0.args"
+    ln --check
+    check "saved rules of a missing interface reported" contains "$out" "Saved rules of lnghost0: the interface no longer exists"
+    ln --clean --yes
+    check "stale saved rules removed" [ ! -e "$fixture_state/lnghost0.args" ]
+
+    # Persisted rules that cannot be applied
+    mkdir -p /etc/latencyninja/persist && chmod 700 /etc/latencyninja/persist
+    printf -- '--interface\nlnghost1\n--packet_loss\n500\n' > /etc/latencyninja/persist/lnghost1.args
+    printf -- '--interface\nlnghost2\n--latency\n30\n' > /etc/latencyninja/persist/lnghost2.args
+    ln --check
+    check "invalid persisted rules reported" contains "$out" "Persisted rules for lnghost1 cannot be applied: Invalid packet_loss format"
+    check "valid persisted rules for a missing interface are information" contains "$out" "Persisted rules for lnghost2: the interface doesn't exist now"
+    check "and not counted as fixable" not_contains "$out" "[clean]  Persisted rules for lnghost2"
+    ln --clean --yes
+    check "invalid persisted rules removed" [ ! -e /etc/latencyninja/persist/lnghost1.args ]
+    check "valid persisted rules kept" [ -e /etc/latencyninja/persist/lnghost2.args ]
+    rm -f /etc/latencyninja/persist/lnghost2.args
+
+    # Old backups, except those a pending timed rollback needs
+    mkdir -p "$work_dir/bk"; rm -f "$work_dir/bk/"*
+    touch -d "60 days ago" "$work_dir/bk/latencyninja_tc_backup_old"
+    touch "$work_dir/bk/latencyninja_tc_backup_new"
+    ln --check --backup "$work_dir/bk"
+    check "old backup reported" contains "$out" "1 backup file(s)"
+    ln --clean --yes --backup "$work_dir/bk"
+    check "old backup removed" [ ! -e "$work_dir/bk/latencyninja_tc_backup_old" ]
+    check "recent backup kept" [ -e "$work_dir/bk/latencyninja_tc_backup_new" ]
+
+    # Invalid custom profiles are reported but never changed
+    mkdir -p /etc/latencyninja/profiles
+    echo '{ "description": "Typo", "latncy": "70" }' > /etc/latencyninja/profiles/lncheck.json
+    ln --check
+    check "invalid profile reported" contains "$out" "lncheck.json is not valid: unknown key(s): latncy"
+    ln --clean --yes
+    check "invalid profile left alone" [ -e /etc/latencyninja/profiles/lncheck.json ]
+    check "--clean reports what is left" contains "$out" "need attention"
+    rm -f /etc/latencyninja/profiles/lncheck.json
+
+    ln --check --latency 10
+    check "--check can't be combined with rules" contains "$out" "can't be combined"
+}
+
+test_check_clean_namespace() {
+    modprobe ifb 2>/dev/null
+    ip -n lnpeer link add lne-orphan1 type ifb
+    ip link add lne-orphan2 type ifb
+    ln --netns lnpeer --check
+    check "the namespace is named" contains "$out" "Checking network namespace lnpeer"
+    check "orphan in the namespace reported" contains "$out" "ifb device lne-orphan1"
+    check "orphan on the host not reported" not_contains "$out" "lne-orphan2"
+    ln --netns lnpeer --clean --yes
+    check "orphan in the namespace removed" not ip -n lnpeer link show lne-orphan1
+    check "orphan on the host untouched" ip link show lne-orphan2
+    ip link delete lne-orphan2
+}
+
 # ---------- tests: updater ----------
 
 test_update() {
@@ -1165,6 +1379,7 @@ for t in \
     netns_apply netns_isolation netns_timed_rollback netns_snapshot pid_target namespace_errors container_target \
     json_every_option json_persist_and_profile json_namespaces json_errors profile_unknown_key \
     persist_netns persist_container snapshot_all_namespaces namespace_aliases \
+    validation_normalization ssh_guard ssh_guard_duration check_clean check_clean_namespace \
     update
 do
     run_test "$t"

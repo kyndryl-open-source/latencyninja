@@ -37,6 +37,8 @@ about() {
     echo "  -q, --query                                     Display current tc rules."
     echo "  --show-interfaces                               List network interfaces with their type, IPv4 address and Latency Ninja status."
     echo "  -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface."
+    echo "  --check                                         Check for leftovers (orphaned ifb devices, stale state, broken persisted rules, old backups) and invalid profiles. Exits 1 if any are found."
+    echo "  --clean                                         Check, then remove the leftovers after confirmation (--yes skips the confirmation). Active rules are never touched."
     echo
     echo "  --netns <name>                                  Apply/query/roll back inside a named network namespace (see 'ip netns list')."
     echo "  --pid <pid>                                     Apply/query/roll back inside the network namespace of a process."
@@ -65,6 +67,7 @@ about() {
     echo "  -p, --profile <name>                            Apply a network profile (e.g., 3g, 4g, satellite). Explicit options override its values."
     echo "  --profiles                                      List the available profiles."
     echo "  -t, --duration <time>                           Automatically roll back after a duration (e.g., 30s, 10m, 2h), restoring the previous rules."
+    echo "  --allow-ssh                                     Apply rules even if they affect your SSH session (refused by default unless --duration is used)."
     echo
     echo "  --json <path/file.json>                         Path to JSON file."
     echo "  --backup <path>                                 Directory for tc rules backup files (default: /tmp/)."
@@ -94,6 +97,8 @@ usage() {
     echo "  -q, --query       Display current tc rules."
     echo "  --show-interfaces List interfaces, their type, IPv4 and Latency Ninja status."
     echo "  -r, --rollback    Rollback networking changes. (Requires -i)"
+    echo "  --check           Check for leftovers and invalid profiles."
+    echo "  --clean           Check, then remove the leftovers (--yes: no confirmation)."
     echo
     echo "  --netns           Run inside a named network namespace."
     echo "  --pid             Run inside the network namespace of a process."
@@ -114,6 +119,7 @@ usage() {
     echo "  -b, --rate        Bandwidth limit per direction (e.g., 2mbit)."
     echo "  -p, --profile     Network profile (e.g., 3g, 4g, satellite). --profiles lists them."
     echo "  -t, --duration    Automatic rollback after a duration (e.g., 10m)."
+    echo "  --allow-ssh       Apply rules even if they affect your SSH session."
     echo
     echo "  --json            Path to JSON file."
     echo "  --backup          Directory for tc rules backup (default: /tmp/)."
