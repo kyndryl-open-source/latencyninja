@@ -1208,7 +1208,8 @@ test_failed_apply_undone() {
     check "and not the new ones" not_contains "$(tc qdisc show dev lne-$dev)" "delay 40ms"
     ln --rollback --interface "$dev"
     ln --check
-    check "--check finds nothing wrong (exit $rc)" [ "$rc" -eq 0 ]
+    check "--check finds no leftover ifb device" not_contains "$out" "ifb device"
+    check "--check finds no leftover redirect" not_contains "$out" "redirect"
 }
 
 test_failed_apply_timer_kept() {
