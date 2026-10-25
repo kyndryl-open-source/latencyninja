@@ -27,4 +27,4 @@ same path, so edits on the host are tested immediately.
 (ping RTT/loss/duplicates, TCP connect times per port), plus `tc` state, `--query`,
 `--rollback`, JSON import, backup/logging files, snapshots, persistence (interface re-creation),
 bonded and WireGuard interfaces, bandwidth limits (measured TCP throughput), profiles, timed
-rollbacks, validation errors, input normalization, the SSH lockout guard (simulated with `SSH_CONNECTION`), `--check`/`--clean` and the updater.
+rollbacks, validation errors, input normalization, `--dry-run`, the SSH lockout guard (simulated with `SSH_CONNECTION`), `--check`/`--clean` and the updater.

@@ -1177,6 +1177,41 @@ ln_ssh() {
     rc=$?
 }
 
+test_dry_run() {
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2:80 --latency 40 --jitter 5 --packet_loss 1
+    check "dry run succeeds (exit $rc)" [ "$rc" -eq 0 ]
+    check "shows the netem command" contains "$out" "tc qdisc add dev lne-$dev parent 1:1 handle 20:0 netem delay 20ms 2.5ms loss 1%"
+    check "shows the ingress redirect" contains "$out" "redirect dev lni-$dev"
+    check "shows the filter with the port" contains "$out" "match ip dport 80 0xffff"
+    check "says nothing was changed" contains "$out" "nothing was changed"
+    check "gives the command to apply" contains "$out" "To apply, run: sudo ./latencyninja --interface $dev --dst_ip 10.10.0.2:80"
+    check "no rules" not_contains "$(tc qdisc show dev $dev)" "prio"
+    check "no ifb devices" not_contains "$(ip -o link show)" "-$dev:"
+
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 40 --direction egress --logging "$work_dir/dry.log" --backup "$work_dir"
+    check "egress only creates the egress device" contains "$out" "ip link add lne-$dev type ifb"
+    check "egress only doesn't create the ingress device" not_contains "$out" "ip link add lni-$dev"
+    check "no log file" not test -e "$work_dir/dry.log"
+    check "no backup file" not_contains "$(ls "$work_dir" 2>/dev/null)" "latencyninja_tc_backup"
+
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency abc
+    check "invalid values still fail (exit $rc)" [ "$rc" -ne 0 ]
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --duration 10m --persist --latency 20
+    check "options that can't work together are caught" contains "$out" "--duration option cannot be combined with --persist"
+
+    ln --dry-run --rollback --interface "$dev"
+    check "can't be combined with --rollback" contains "$out" "only previews applying rules"
+    ln --dry-run --check
+    check "can't be combined with --check" contains "$out" "only previews applying rules"
+
+    ln_ssh --dry-run --interface "$dev" --dst_ip 10.10.0.2 --packet_loss 50
+    check "the SSH guard applies to dry runs (exit $rc)" contains "$out" "SSH session"
+
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 40
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 80
+    check "existing rules are untouched by a dry run" contains "$(tc qdisc show dev lne-$dev)" "delay 20ms"
+}
+
 test_ssh_guard() {
     ln_ssh --interface "$dev" --dst_ip 10.10.0.2 --packet_loss 50
     check "rules matching the SSH client refused (exit $rc)" [ "$rc" -ne 0 ]
@@ -1379,7 +1414,7 @@ for t in \
     netns_apply netns_isolation netns_timed_rollback netns_snapshot pid_target namespace_errors container_target \
     json_every_option json_persist_and_profile json_namespaces json_errors profile_unknown_key \
     persist_netns persist_container snapshot_all_namespaces namespace_aliases \
-    validation_normalization ssh_guard ssh_guard_duration check_clean check_clean_namespace \
+    validation_normalization dry_run ssh_guard ssh_guard_duration check_clean check_clean_namespace \
     update
 do
     run_test "$t"

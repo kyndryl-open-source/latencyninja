@@ -39,6 +39,7 @@ script_dir="$(dirname "$script_path")"
 . "$script_dir/inc/json_utils.sh"
 . "$script_dir/inc/ssh_guard_utils.sh"
 . "$script_dir/inc/check_utils.sh"
+. "$script_dir/inc/dry_run_utils.sh"
 
 # Global main function
 main() {
@@ -56,6 +57,7 @@ main() {
     parse_arguments 
     validate_arguments
     check_ssh_lockout
+    [ "$dry_run" -eq 1 ] && { dry_run_plan "$@"; exit 0; }
 
     # Set defaults for backup and logging paths
     [ -z "$backup_dir" ] && backup_dir="/tmp"

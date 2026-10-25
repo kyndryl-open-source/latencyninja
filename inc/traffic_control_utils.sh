@@ -139,8 +139,7 @@ configure_egress_traffic_controls() {
                 stripped_dip="${dip%%:*}"  # Extract IP part before the colon        
                 if [ "$stripped_dprt" != "0" ]; then
                     if [ "$ips_swapped" -eq 1 ]; then
-                        echo $stripped_dprt
-                        debug_command $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip sport $stripped_dprt 0xffff match ip dst $stripped_dip flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                        $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip sport $stripped_dprt 0xffff match ip dst $stripped_dip flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
                     else
                         $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip dst $stripped_dip match ip dport $stripped_dprt 0xffff flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
                     fi

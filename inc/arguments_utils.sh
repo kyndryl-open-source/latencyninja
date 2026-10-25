@@ -30,6 +30,7 @@ get_arguments() {
             --clean) clean_mode=1; shift ;;
             --yes) assume_yes=1; shift ;;
             --allow-ssh) allow_ssh=1; shift ;;
+            --dry-run) dry_run=1; shift ;;
             -r|--rollback) rollback_required=1; shift;;
             -i|--interface) process_arg eth_interface interface_provided "$@"; shift 2 ;;
             -s|--src_ip) process_arg validate_src_ip "" "$@"; shift 2 ;;
@@ -84,6 +85,12 @@ process_arg() {
 
 # Function to parse arguments
 parse_arguments() {
+    # --dry-run only previews applying rules
+    if [ "$dry_run" -eq 1 ]; then
+        [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ] || [ "$rollback_required" -eq 1 ] || [ -n "$save_file$restore_file$apply_persisted$timed_rollback_file" ] &&
+            die "The --dry-run option only previews applying rules. It can't be combined with --check, --clean, --rollback, --save, --restore or --apply-persisted."
+    fi
+
     # --check and --clean audit Latency Ninja's own state and don't apply rules
     if [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ]; then
         [ -n "$json_file$eth_interface$src_ip_arg$dst_ip_arg$latency$jitter$packet_loss$duplicate$corrupt$reorder$rate$profile$duration$save_file$restore_file$apply_persisted" ] || [ "$persist" -eq 1 ] || [ "$rollback_required" -eq 1 ] &&

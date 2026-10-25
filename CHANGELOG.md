@@ -1,3 +1,8 @@
+CHANGELOG 1.28
+- Added --dry-run: validates the options like a normal run, including the SSH lockout guard, and prints the tc/ip commands that would be run without changing anything (no rules, backup, log, persistence or timer); it can't be combined with --rollback, --check, --clean, --save, --restore or --apply-persisted
+- The egress filter for rules with swapped source and destination no longer prints the port and "Running:" debug lines
+- Roadmap: --dry-run removed (done); the rest of the safety and automation items are now 1.29, and the planned versions after it moved by one
+
 CHANGELOG 1.27
 - Added --check and --clean: --check finds leftovers (ifb devices no interface uses, rules redirecting to a missing ifb device, saved rules and timed rollbacks of interfaces, containers and namespaces that are gone, persisted rules that can't be applied, persistence units left installed, old backups) and invalid profiles without changing anything and exits 1 if it finds a problem; --clean lists what it can remove, asks for confirmation (--yes skips it) and removes it. Active rules, valid persisted rules and pending timed rollbacks are never touched; works on one container or namespace with --container, --netns and --pid
 - Added an SSH lockout guard: rules that would affect an SSH session reaching the machine through the target interface are refused unless --duration is used (rules roll back by themselves, with a warning) or --allow-ssh ("allow_ssh" in JSON files) is given
