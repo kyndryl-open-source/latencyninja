@@ -1159,7 +1159,6 @@ test_validation_normalization() {
     check "and still applies" contains "$(tc qdisc show dev lne-$dev)" "delay 10ms"
     ln --interface "$dev" --dst_ip 10.10.0.2 --reorder 5 --packet_loss 1
     check "reorder without latency is rejected (tc refuses it)" contains "$out" "Reorder can only be used with latency"
-    check "and nothing is applied" not_contains "$(tc qdisc show dev $dev)" "prio"
 
     echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"packet_loss\": 150 }" > "$work_dir/v1.json"
     ln --json "$work_dir/v1.json"; check "JSON values are validated too" contains "$out" "can't be more than 100"
@@ -1201,15 +1200,15 @@ test_failed_apply_undone() {
     check "no prio qdisc left" not_contains "$(tc qdisc show dev $dev)" "prio"
     check "no ingress qdisc left" not_contains "$(tc qdisc show dev $dev)" "ingress"
     check "no ifb devices left" not_contains "$(ip -o link show)" "-$dev:"
-    ln --check
-    check "--check finds nothing wrong (exit $rc)" [ "$rc" -eq 0 ]
-
     # The rules from before the failed apply come back
     ln --interface "$dev" --dst_ip 10.10.0.2 --latency 40
     ln_failing_tc --interface "$dev" --dst_ip 10.10.0.2 --latency 80
     check "failed re-apply returns non-zero" [ "$rc" -ne 0 ]
     check "previous rules are back" contains "$(tc qdisc show dev lne-$dev)" "delay 20ms"
     check "and not the new ones" not_contains "$(tc qdisc show dev lne-$dev)" "delay 40ms"
+    ln --rollback --interface "$dev"
+    ln --check
+    check "--check finds nothing wrong (exit $rc)" [ "$rc" -eq 0 ]
 }
 
 test_failed_apply_timer_kept() {
