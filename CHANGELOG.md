@@ -1,3 +1,11 @@
+CHANGELOG 1.27
+- Added --check and --clean: --check finds leftovers (ifb devices no interface uses, rules redirecting to a missing ifb device, saved rules and timed rollbacks of interfaces, containers and namespaces that are gone, persisted rules that can't be applied, persistence units left installed, old backups) and invalid profiles without changing anything and exits 1 if it finds a problem; --clean lists what it can remove, asks for confirmation (--yes skips it) and removes it. Active rules, valid persisted rules and pending timed rollbacks are never touched; works on one container or namespace with --container, --netns and --pid
+- Added an SSH lockout guard: rules that would affect an SSH session reaching the machine through the target interface are refused unless --duration is used (rules roll back by themselves, with a warning) or --allow-ssh ("allow_ssh" in JSON files) is given
+- Stricter input validation, shared by the command line, JSON files and profiles: numbers are no longer stripped of other characters (abc50 and 1.2.3 were accepted before), percentages above 100 are rejected, "ms" and "%" suffixes and surrounding spaces are accepted, and numbers are normalized (005 becomes 5)
+- Stricter IP and port validation: octets above 255 and prefix lengths above 32 are rejected, leading zeros are removed so 010.0.0.1 is not read as octal, empty ports are errors instead of being dropped, duplicate addresses are removed, and a port is checked to be a number before it is used (a non-numeric port was evaluated by bash as an arithmetic expression, which can run commands as root; this mattered for JSON files, snapshots and persisted rules from untrusted sources)
+- direction, rate and duration are case insensitive; warnings for jitter larger than latency and for --reorder without --latency
+- Roadmap: added a Starlink profile (1.29), inter-AZ and cloud inter-region profiles (1.30), Starlink handover scenarios (1.31) and a Kubernetes sidecar image (2.0)
+
 CHANGELOG 1.26.1
 - --show-interfaces now requires root like every other command, so there is no exception to remember; it always shows persistence and timed rollbacks
 

@@ -41,6 +41,7 @@ schedule_rollback() {
 
     mkdir -p "$state_dir" && chmod 700 "$state_dir"
     echo $(( $(date +%s) + seconds )) > "$state_dir/$interface.expires"
+    echo "$backup_file" > "$state_dir/$interface.backup"  # kept by --clean while the rollback is pending
     echo "Rollback of $interface scheduled at $(date -d "+${seconds} seconds" '+%Y-%m-%d %H:%M:%S') ($unit.timer)."
     echo "To end earlier, run: sudo $0 --rollback --interface $interface$(namespace_hint)"
 }
@@ -50,7 +51,7 @@ cancel_scheduled_rollback() {
     local interface="$1"
     [ -f "$state_dir/$interface.expires" ] || return 0
     command -v systemctl &>/dev/null && systemctl stop "$(rollback_unit_name "$interface").timer" &>/dev/null
-    rm -f "$state_dir/$interface.expires"
+    rm -f "$state_dir/$interface.expires" "$state_dir/$interface.backup"
 }
 
 # Function to list pending timed rollbacks with the time left
@@ -61,7 +62,7 @@ scheduled_rollbacks() {
         interface=$(basename "$file" .expires)
         left=$(( $(cat "$file") - $(date +%s) ))
         if [ "$left" -lt 0 ] || ! systemctl is-active -q "$(rollback_unit_name "$interface").timer" 2>/dev/null; then
-            rm -f "$file"
+            rm -f "$file" "${file%.expires}.backup"
             continue
         fi
         list="${list:+$list, }$interface in $((left / 60))m $((left % 60))s"
@@ -74,7 +75,7 @@ run_timed_rollback() {
     local interface="$1"
     local backup_file="$2"
 
-    rm -f "$state_dir/$interface.expires"
+    rm -f "$state_dir/$interface.expires" "$state_dir/$interface.backup"
     if [ -f "$backup_file" ] && restore_snapshot "$backup_file" "$interface"; then
         echo "Timed rollback of $interface completed."
     else

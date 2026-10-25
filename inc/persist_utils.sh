@@ -190,7 +190,7 @@ apply_persisted_rules() {
 
     mapfile -t args < "$file"
     validate_saved_args "${args[@]}" || die "Invalid persisted arguments in $file."
-    exec bash "$script_path" "${args[@]}"
+    exec bash "$script_path" "${args[@]}" --allow-ssh
 }
 
 # Function to handle --watch-namespaces, run by the watcher service
@@ -236,7 +236,7 @@ reconcile_namespaces() {
         fi
         echo "Re-applying persisted rules for $interface in $(ref_description "$ref")."
         # The address may not be configured yet right after a restart; failures are retried next time
-        if bash "$script_path" "--$type" "$name" "${args[@]}" </dev/null >/dev/null 2>&1; then
+        if bash "$script_path" "--$type" "$name" "${args[@]}" --allow-ssh </dev/null >/dev/null 2>&1; then
             applied_to[$file]="$identity"
         else
             echo "  Failed, will retry."

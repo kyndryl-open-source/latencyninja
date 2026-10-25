@@ -10,11 +10,14 @@ Detailed examples of every Latency Ninja feature. For installation and an overvi
 - [Combining conditions](#combining-conditions)
 - [Direction: ingress, egress or both](#direction-ingress-egress-or-both)
 - [Choosing which traffic is affected](#choosing-which-traffic-is-affected)
+- [How values are validated](#how-values-are-validated)
 - [Profiles](#profiles)
 - [JSON files](#json-files)
 - [Checking what is applied](#checking-what-is-applied)
 - [Rolling back](#rolling-back)
 - [Timed rollback](#timed-rollback)
+- [SSH lockout guard](#ssh-lockout-guard)
+- [Check and clean](#check-and-clean)
 - [Snapshots and backups](#snapshots-and-backups)
 - [Persistence across reboots and interface restarts](#persistence-across-reboots-and-interface-restarts)
 - [Several interfaces at once](#several-interfaces-at-once)
@@ -162,6 +165,15 @@ If you give only `--src_ip`, the destination defaults to this host and the persp
 
     sudo ./latencyninja -i eth0 -s 192.168.100.200,192.168.100.201 -l 300
 
+## How values are validated
+
+Every value is validated and cleaned before anything is applied, whether it comes from the command line, a JSON file or a profile. Nothing is ever guessed: a value that can't be understood is rejected with a message instead of being altered.
+
+- Spaces around values are ignored, and `direction`, `rate` and `duration` are case insensitive (`BOTH`, `2Mbit`, `10M` work).
+- `latency` and `jitter` are positive numbers, optionally followed by `ms` (`50`, `2.5`, `50ms`). The percentages (`packet_loss`, `duplicate`, `corrupt`, `reorder`) are positive numbers up to 100, optionally followed by `%` (`0.9`, `0.9%`). Anything else (`abc50`, `1.2.3`, `1e3`, `150`) is rejected, and numbers are written back without extra zeros (`005` becomes `5`).
+- IP addresses must be valid IPv4 (each part 0-255, prefix length 0-32) and ports numbers from 0 to 65535. Leading zeros are removed (so `010.0.0.1` is never read as octal), duplicates are dropped, and an empty port (`10.0.0.1:`) is an error.
+- A warning is printed, and the rules are still applied, when the jitter is larger than the latency or when `--reorder` is used without `--latency`.
+
 ## Profiles
 
 Profiles apply a realistic combination of conditions in one option:
@@ -228,6 +240,7 @@ Every option that applies rules can come from a JSON file, including the target 
 | `profile` | profile name | `--profile` |
 | `duration` | string, e.g. `"15m"`, or number of seconds | `--duration` |
 | `persist` | `true` or `false` | `--persist` |
+| `allow_ssh` | `true` or `false` | `--allow-ssh` |
 | `backup`, `logging` | path | `--backup`, `--logging` |
 | `container`, `netns`, `pid` | name, name or process ID (only one of them) | `--container`, `--netns`, `--pid` |
 
@@ -283,6 +296,59 @@ When the time is up, the interface goes back to how it was just before: if it ha
 Timed rollback uses a systemd timer, so it requires systemd and can't be combined with `--persist`. Timers don't survive a reboot (neither do non-persisted rules).
 
 On remote machines, `--duration` is a good safety net: if a rule cuts off your SSH session, it is removed automatically.
+
+## SSH lockout guard
+
+Rules that match the traffic of your own SSH session can make it unusable, and with it the way to remove the rules. Before applying rules, Latency Ninja looks for established SSH sessions (sshd and dropbear connections, plus the session the command runs in) that reach the machine through the target interface. If the rules would affect one, nothing is applied:
+
+    $ sudo ./latencyninja -i eth0 -d 10.0.0.0/24 --packet_loss 50
+    Error: These rules would also affect your SSH session from 10.0.0.9 on eth0 and could lock you out. Exclude that address from --src_ip/--dst_ip, add --duration <time> so the rules roll back automatically, or add --allow-ssh to apply them anyway.
+
+Your options:
+
+- Target something that doesn't include your client address, e.g. a single server instead of the whole subnet.
+- Add `--duration`. The rules are then applied with a warning and removed on their own, even if the session is lost:
+
+      sudo ./latencyninja -i eth0 -d 10.0.0.0/24 --packet_loss 50 --duration 5m
+
+- Add `--allow-ssh` (or `"allow_ssh": true` in a JSON file) to apply the rules anyway.
+
+The check is conservative. A session counts as affected when its client address is covered by `--dst_ip` (or `--src_ip`) and the local address by the other side, with port 0 (any), the client's port or the SSH server port. It only looks at sessions whose route goes through the interface being shaped, so rules on a different interface than the one carrying your session aren't blocked. Restoring snapshots (including timed rollbacks) and re-applying persisted rules don't use the guard. Inside `--container`/`--netns`, only SSH sessions in that namespace are considered.
+
+## Check and clean
+
+`--check` looks for leftovers and settings that no longer work, without changing anything. `--clean` does the same and then removes what can be removed, after listing it and asking for confirmation (`--yes` skips the question, for scripts):
+
+    sudo ./latencyninja --check
+    sudo ./latencyninja --clean
+    sudo ./latencyninja --clean --yes
+
+    Checking the host...
+
+      [clean]  ifb device lne-eth3 is not used by any interface
+      [clean]  Saved rules of eth9: the interface no longer exists
+      [clean]  Persisted rules for eth1 cannot be applied: Invalid packet_loss format. ...
+      [clean]  3 backup file(s) in /tmp older than 30 days
+      [check]  Profile /etc/latencyninja/profiles/lte.json is not valid: unknown key(s): bogus
+
+    Found 5 problem(s), 4 can be fixed with: sudo ./latencyninja --clean.
+
+`[clean]` items are removed by `--clean`, `[check]` items need you to look at them, and `[info]` items are for information only. `--check` exits with 1 when it finds a problem, so it can be used in scripts and monitoring.
+
+What is checked:
+
+| Check | `--clean` does |
+|---|---|
+| ifb devices (`lni-*`, `lne-*`) that no interface sends traffic through | deletes the device |
+| Interfaces whose rules redirect to an ifb device that no longer exists | removes that interface's rules, like `--rollback` (persisted rules are kept) |
+| Saved rules, expired timed rollbacks and timers of interfaces, containers and namespaces that are gone | forgets the state and stops the timer |
+| Persisted rules with invalid values, which would fail to apply at boot | deletes the persisted file |
+| Persistence unit, udev rule or namespace watcher still installed with nothing persisted | removes them (`--persist` installs them again) |
+| Backup files older than 30 days in `--backup` (default `/tmp`) | deletes them, except ones a pending timed rollback needs |
+| Built-in and custom profiles with unknown keys or invalid values | nothing, reported only |
+| Failed Latency Ninja systemd units | nothing, reported only (`journalctl -u <unit>`) |
+
+Active rules, valid persisted rules and pending timed rollbacks are never touched. Persisted rules for an interface or container that isn't there right now are reported as information: they apply when it appears. With `--container`, `--netns` or `--pid`, only that namespace is checked: its ifb devices, redirects, saved state and persisted rules.
 
 ## Snapshots and backups
 
@@ -457,4 +523,6 @@ The updater compares your version with the latest release on GitHub and, if you 
 - **"Interface ... has no IPv4 address"**: bond members and some tunnel interfaces have no address; target the bond or the interface that has one, or give both `--src_ip` and `--dst_ip`.
 - **Nothing seems to happen**: check that the destination matches the traffic (`--query` shows the filters), and that ports are the remote side's ports.
 - **Missing packages**: Latency Ninja offers to install them; see the README for the list per distribution.
-- **SSH session lost after applying rules**: if you used `--duration`, wait for the automatic rollback; otherwise roll back from the console.
+- **"These rules would also affect your SSH session"**: see [SSH lockout guard](#ssh-lockout-guard). Exclude your address, add `--duration`, or add `--allow-ssh`.
+- **SSH session lost after applying rules**: if you used `--duration`, wait for the automatic rollback; otherwise roll back from the console. Rules are only checked against sessions that exist when they are applied.
+- **Something looks left over** (an `lni-*`/`lne-*` device, a stale timer): run `sudo ./latencyninja --check`, then `--clean`.
