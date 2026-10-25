@@ -1265,7 +1265,6 @@ test_check_clean() {
 
     # Rules redirecting to an ifb device that is gone
     ip link delete lne-$dev
-    echo "DIAG root: $(tc filter show dev $dev | tr '\n' '|')"; echo "DIAG ingress: $(tc filter show dev $dev ingress | tr '\n' '|')"; echo "DIAG qdisc: $(tc qdisc show dev $dev | tr '\n' '|')"
     ln --check
     check "dangling redirect reported" contains "$out" "Rules on $dev redirect egress traffic to lne-$dev, which no longer exists"
     ln --clean --yes

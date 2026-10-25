@@ -80,8 +80,8 @@ check_ifb_devices() {
 }
 
 # Function to find interfaces whose rules redirect traffic to an ifb device that is gone. tc prints
-# the target of a redirect by name while the device exists and as if<index> once it is deleted, so
-# both are looked at, and only when the ifb device Latency Ninja would use for the interface is missing.
+# the target of a redirect by name while the device exists and as * (or if<index>) once it is deleted,
+# so all are looked at, and only when the ifb device Latency Ninja would use for the interface is missing.
 check_dangling_redirects() {
     local dev kind prefix target expected
     for dev in $(list_network_devices); do
@@ -95,7 +95,7 @@ check_dangling_redirects() {
             fi
             [ -n "$target" ] || continue
             expected=$(ifb_name_for "$prefix" "$dev")
-            [[ "$target" == "$expected" || "$target" =~ ^if[0-9]+$ ]] || continue
+            [[ "$target" == "$expected" || "$target" == "*" || "$target" =~ ^if[0-9]+$ ]] || continue
             $ip_path link show dev "$expected" &>/dev/null && continue
             add_finding fix "Rules on $dev redirect $kind traffic to $expected, which no longer exists" fix_reset_interface "$dev"
             break
