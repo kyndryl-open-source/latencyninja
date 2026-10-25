@@ -1,0 +1,14 @@
+name: probe
+on:
+  push:
+    branches: [probe-tmp]
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq kmod iproute2 inetutils-ping curl jq git python3 wireguard-tools
+          for module in ifb sch_netem; do sudo modprobe "$module" || { sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)" && sudo modprobe "$module"; }; done
+      - run: sudo bash probe.sh
