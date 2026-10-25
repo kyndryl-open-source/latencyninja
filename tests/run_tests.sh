@@ -1189,7 +1189,8 @@ test_dry_run() {
     check "no ifb devices" not_contains "$(ip -o link show)" "-$dev:"
 
     ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 40 --direction egress --logging "$work_dir/dry.log" --backup "$work_dir"
-    check "egress only shows egress" not_contains "$out" "lni-$dev"
+    check "egress only creates the egress device" contains "$out" "ip link add lne-$dev type ifb"
+    check "egress only doesn't create the ingress device" not_contains "$out" "ip link add lni-$dev"
     check "no log file" not test -e "$work_dir/dry.log"
     check "no backup file" not_contains "$(ls "$work_dir" 2>/dev/null)" "latencyninja_tc_backup"
 
