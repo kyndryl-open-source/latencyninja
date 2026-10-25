@@ -44,20 +44,6 @@ die() {
     exit $exit_code
 }
 
-# Function to debug command run with variables for debugging purposes
-debug_command() {
-    local command="$*"
-    echo "Running: $command"
-    eval "$command"
-    
-    echo "Command exited with: $?"
-
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to execute $command"
-        exit 1  # or any action you'd like to perform on failure
-    fi
-}
-
 # Function to check for root/sudo privileges
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -81,12 +67,12 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("kmod" "iproute2" "inetutils-ping" "curl" "jq")
+            local packages=("kmod" "iproute2" "curl" "jq")
             # git is only required for --update
             [[ "$update_requested" -eq 1 ]] && packages+=("git")
             ;;
         centos|fedora|rhel)
-            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "iputils" "curl" "jq")
+            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "curl" "jq")
             # git is only required for --update
             [[ "$update_requested" -eq 1 ]] && packages+=("git")
             ;;

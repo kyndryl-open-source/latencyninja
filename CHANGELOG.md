@@ -1,3 +1,6 @@
+CHANGELOG 1.28.1
+- 
+
 CHANGELOG 1.28
 - Added --dry-run: validates the options like a normal run, including the SSH lockout guard, and prints the tc/ip commands that would be run without changing anything (no rules, backup, log, persistence or timer); it can't be combined with --rollback, --check, --clean, --save, --restore or --apply-persisted
 - The egress filter for rules with swapped source and destination no longer prints the port and "Running:" debug lines

@@ -13,12 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-# Function to capture a restorable snapshot of all Latency Ninja rules before changes
-backup_tc_snapshot() {
-    local backup_file="$1"
-    local target_dir
-
-    target_dir=$(dirname "$backup_file")
+# Function to check that backups can be written to a directory
+check_backup_dir() {
+    local target_dir="$1"
 
     if [ ! -d "$target_dir" ]; then
         die "Backup directory does not exist: $target_dir"
@@ -27,6 +24,13 @@ backup_tc_snapshot() {
     if [ ! -w "$target_dir" ]; then
         die "Backup directory is not writable: $target_dir"
     fi
+}
+
+# Function to capture a restorable snapshot of all Latency Ninja rules before changes
+backup_tc_snapshot() {
+    local backup_file="$1"
+
+    check_backup_dir "$(dirname "$backup_file")"
 
     write_snapshot "$backup_file" || die "Failed to write backup file: $backup_file"
 }

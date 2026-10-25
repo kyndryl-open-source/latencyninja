@@ -206,7 +206,7 @@ persist_file_label() {
 
 # Function to print why saved or persisted arguments (one option or value per argument) can't be applied; nothing if they can
 saved_args_error() {
-    local args=("$@") i opt value name kind error has_interface=0
+    local args=("$@") i opt value name kind error has_interface=0 has_latency=0 has_reorder=0
     [ "${#args[@]}" -gt 0 ] || { echo "it is empty"; return; }
     validate_saved_args "${args[@]}" || { echo "it contains options that don't apply rules"; return; }
     [ $(( ${#args[@]} % 2 )) -eq 0 ] || { echo "an option has no value"; return; }
@@ -217,6 +217,8 @@ saved_args_error() {
             --interface) has_interface=1 ;;
             --latency|--jitter|--packet_loss|--duplicate|--corrupt|--reorder)
                 name="${opt#--}"
+                [ "$name" = "latency" ] && has_latency=1
+                [ "$name" = "reorder" ] && has_reorder=1
                 error=$(declare -g "$name=$value"; check_numeric "$name" 2>&1) || { echo "${error#Error: }"; return; } ;;
             --rate)
                 error=$(validate_rate "$value" 2>&1) || { echo "${error#Error: }"; return; } ;;
@@ -228,7 +230,8 @@ saved_args_error() {
                 error=$(add_ip_entries "$kind" "$value"; normalize_ip_list "$kind" 2>&1) || { echo "${error#Error: }"; return; } ;;
         esac
     done
-    [ "$has_interface" -eq 1 ] || echo "it has no interface"
+    [ "$has_interface" -eq 1 ] || { echo "it has no interface"; return; }
+    [ "$has_reorder" -eq 0 ] || [ "$has_latency" -eq 1 ] || echo "reorder can only be used with latency"
 }
 
 # Function to check persisted rules and the persistence machinery installed for them

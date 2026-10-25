@@ -57,19 +57,26 @@ main() {
     parse_arguments 
     validate_arguments
     check_ssh_lockout
-    [ "$dry_run" -eq 1 ] && { dry_run_plan "$@"; exit 0; }
 
-    # Set defaults for backup and logging paths
+    # Set defaults for backup and logging paths, and check them before anything is changed
     [ -z "$backup_dir" ] && backup_dir="/tmp"
     [ -z "$log_file" ] && log_file="/tmp/latencyninja.log"
-    local backup_file="${backup_dir}/latencyninja_tc_backup_$(date +%Y%m%d_%H%M%S)_$$"
+    check_backup_dir "$backup_dir"
+    check_log_file "$log_file"
+    warn_foreign_qdiscs "$eth_interface"
+    [ "$dry_run" -eq 1 ] && { dry_run_plan "$@"; exit 0; }
+    backup_file="${backup_dir}/latencyninja_tc_backup_$(date +%Y%m%d_%H%M%S)_$$"
 
     # Capture pre-change tc rules for all interfaces
     backup_tc_snapshot "$backup_file"
 
+    # From here until the rules are in place, a failure or Ctrl-C puts the previous rules back
     rollback_required=1
-    cancel_scheduled_rollback "$eth_interface"  # new rules replace any pending timed rollback
+    apply_in_progress=1
+    trap undo_failed_apply EXIT
+    trap 'exit 130' INT TERM HUP
     load_ifb_module
+    replace_foreign_qdiscs=1
     rollback_everything silent
     display_params "Applying"
     if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then
@@ -85,11 +92,13 @@ main() {
     display_params "Applied"
     save_runtime_state "$eth_interface"
     append_applied_values "$backup_file"
+    cancel_scheduled_rollback "$eth_interface"  # new rules replace any pending timed rollback
     log_execution "$log_file" "$@"
     echo "Backup saved to: $backup_file (restore with: sudo $0 --restore $backup_file$(namespace_hint))"
     echo "Log updated at: $log_file"
 
     [ -n "$duration" ] && schedule_rollback "$eth_interface" "$duration_seconds" "$backup_file"
+    apply_in_progress=0
 
     if [ "$persist" -eq 1 ]; then
         persist_rules "$eth_interface"

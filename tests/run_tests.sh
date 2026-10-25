@@ -24,7 +24,7 @@ yellow() { printf '\033[33m%s\033[0m' "$*"; }
 
 # Run latencyninja from the repo dir. Output is stored in $out and the exit code in $rc.
 ln() {
-    out=$(cd "$repo_dir" && ./latencyninja "$@" </dev/null 2>&1)
+    out=$(cd "$repo_dir" && timeout 300 ./latencyninja "$@" </dev/null 2>&1)
     rc=$?
 }
 
@@ -403,7 +403,7 @@ test_backup_defaults() {
 test_failed_apply_not_logged() {
     # If tc setup fails the run must not be reported/logged as applied
     rm -f "$work_dir/fail.log"; mkdir -p "$work_dir"
-    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 10 --corrupt 150 --direction ingress --logging "$work_dir/fail.log"
+    ln_failing_tc --interface "$dev" --dst_ip 10.10.0.2 --latency 10 --direction ingress --logging "$work_dir/fail.log"
     check "failed apply returns non-zero" [ "$rc" -ne 0 ]
     check "failed apply not logged" [ ! -s "$work_dir/fail.log" ]
 }
@@ -1158,7 +1158,8 @@ test_validation_normalization() {
     check "jitter larger than latency warns" contains "$out" "Warning: the jitter (50 ms) is larger than the latency (20 ms)"
     check "and still applies" contains "$(tc qdisc show dev lne-$dev)" "delay 10ms"
     ln --interface "$dev" --dst_ip 10.10.0.2 --reorder 5 --packet_loss 1
-    check "reorder without latency warns" contains "$out" "--reorder has no effect without --latency"
+    check "reorder without latency is rejected (tc refuses it)" contains "$out" "Reorder can only be used with latency"
+    check "and nothing is applied" not_contains "$(tc qdisc show dev $dev)" "prio"
 
     echo "{ \"interface\": \"$dev\", \"dst_ip\": \"10.10.0.2\", \"packet_loss\": 150 }" > "$work_dir/v1.json"
     ln --json "$work_dir/v1.json"; check "JSON values are validated too" contains "$out" "can't be more than 100"
@@ -1175,6 +1176,109 @@ test_validation_normalization() {
 ln_ssh() {
     out=$(cd "$repo_dir" && SSH_CONNECTION="10.10.0.2 40000 10.10.0.1 22" ./latencyninja "$@" </dev/null 2>&1)
     rc=$?
+}
+
+# Run latencyninja with a tc that fails once when it is asked to set up netem, to test failed applies
+ln_failing_tc() {
+    mkdir -p "$work_dir/failtc"
+    cat > "$work_dir/failtc/tc" <<EOF
+#!/bin/sh
+case "\$*" in
+    *netem*) if [ -e "$work_dir/failtc/once" ]; then rm -f "$work_dir/failtc/once"; echo "injected tc failure" >&2; exit 1; fi ;;
+esac
+exec "$(command -v tc)" "\$@"
+EOF
+    chmod +x "$work_dir/failtc/tc"
+    touch "$work_dir/failtc/once"
+    out=$(cd "$repo_dir" && PATH="$work_dir/failtc:$PATH" ./latencyninja "$@" </dev/null 2>&1)
+    rc=$?
+}
+
+test_failed_apply_undone() {
+    ln_failing_tc --interface "$dev" --dst_ip 10.10.0.2 --latency 10
+    check "a failed apply returns non-zero (exit $rc)" [ "$rc" -ne 0 ]
+    check "says the rules were put back" contains "$out" "restoring the previous rules"
+    check "no prio qdisc left" not_contains "$(tc qdisc show dev $dev)" "prio"
+    check "no ingress qdisc left" not_contains "$(tc qdisc show dev $dev)" "ingress"
+    check "no ifb devices left" not_contains "$(ip -o link show)" "-$dev:"
+    ln --check
+    check "--check finds nothing wrong (exit $rc)" [ "$rc" -eq 0 ]
+
+    # The rules from before the failed apply come back
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 40
+    ln_failing_tc --interface "$dev" --dst_ip 10.10.0.2 --latency 80
+    check "failed re-apply returns non-zero" [ "$rc" -ne 0 ]
+    check "previous rules are back" contains "$(tc qdisc show dev lne-$dev)" "delay 20ms"
+    check "and not the new ones" not_contains "$(tc qdisc show dev lne-$dev)" "delay 40ms"
+}
+
+test_failed_apply_timer_kept() {
+    # A failed apply must not cancel the pending timed rollback of the rules that stay
+    ln --interface "$dev" --dst_ip 10.10.0.3 --latency 40 --duration 10m
+    check "timed rollback scheduled" contains "$(systemctl list-timers --no-legend 'latencyninja-rollback-*')" "latencyninja-rollback-$dev"
+    ln_failing_tc --interface "$dev" --dst_ip 10.10.0.3 --latency 80
+    check "failed apply returns non-zero" [ "$rc" -ne 0 ]
+    ln --query
+    check "the timed rollback is still scheduled" not_contains "$out" "Scheduled rollbacks: none"
+}
+
+test_bad_logging_path() {
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 10 --duration 5m --logging /nonexistent/x.log
+    check "a bad log path is rejected (exit $rc)" [ "$rc" -ne 0 ]
+    check "says why" contains "$out" "Log directory does not exist"
+    check "nothing was applied" not_contains "$(tc qdisc show dev $dev)" "prio"
+    check "no rollback timer" not_contains "$(systemctl list-timers --all --no-legend 'latencyninja-rollback-*')" "latencyninja-rollback-$dev"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 10 --logging /nonexistent/x.log
+    check "--dry-run checks the log path too" contains "$out" "Log directory does not exist"
+}
+
+test_options_without_value() {
+    local opt
+    for opt in --json --backup --logging; do
+        out=$(cd "$repo_dir" && timeout 20 ./latencyninja --interface "$dev" --dst_ip 10.10.0.2 --latency 10 "$opt" </dev/null 2>&1); rc=$?
+        check "$opt without a value is an error, not a hang (exit $rc)" [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]
+        check "$opt explains what is missing" contains "$out" "requires an argument"
+    done
+}
+
+test_value_limits() {
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 274878 --direction egress
+    check "latency above the tc limit is rejected in one direction" contains "$out" "can't be more than 274877 ms in one direction"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 274877 --direction egress
+    check "latency at the tc limit is accepted (exit $rc)" [ "$rc" -eq 0 ]
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 549754 --jitter 100
+    check "with both directions the limit doubles (exit $rc)" [ "$rc" -eq 0 ]
+    check "and each direction gets half" contains "$out" "netem delay 274877ms 50ms"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 549755
+    check "above that is rejected" contains "$out" "can't be more than 549754 ms"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 20 --jitter 300000 --direction egress
+    check "jitter is limited too" contains "$out" "Latency and jitter can't be more than"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 123.456
+    check "halving keeps the precision" contains "$out" "netem delay 61.728ms"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --rate 99999999999999999999mbit
+    check "absurd rates are rejected" contains "$out" "The rate must be between"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --rate 1bit
+    check "rates below 1 byte per second are rejected" contains "$out" "The rate must be between"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --rate 1bps
+    check "1bps is accepted (exit $rc)" [ "$rc" -eq 0 ]
+}
+
+test_foreign_qdiscs() {
+    tc qdisc replace dev "$dev" root handle 5: htb default 1
+    ln --rollback --interface "$dev"
+    check "--rollback leaves a qdisc it didn't set up" contains "$(tc qdisc show dev $dev)" "htb 5:"
+
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 10
+    check "applying warns that the qdisc is replaced" contains "$out" "has a htb root qdisc, which is replaced"
+    check "and applies (exit $rc)" [ "$rc" -eq 0 ]
+    ln --rollback --interface "$dev"
+    check "rollback removes ours" not_contains "$(tc qdisc show dev $dev)" "prio"
+
+    tc qdisc replace dev "$dev" root noqueue 2>/dev/null
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 10
+    check "default qdiscs are replaced without a warning" not_contains "$out" "Warning"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 20
+    check "re-applying our own rules does not warn" not_contains "$out" "Warning"
 }
 
 test_dry_run() {
@@ -1414,7 +1518,7 @@ for t in \
     netns_apply netns_isolation netns_timed_rollback netns_snapshot pid_target namespace_errors container_target \
     json_every_option json_persist_and_profile json_namespaces json_errors profile_unknown_key \
     persist_netns persist_container snapshot_all_namespaces namespace_aliases \
-    validation_normalization dry_run ssh_guard ssh_guard_duration check_clean check_clean_namespace \
+    validation_normalization dry_run failed_apply_undone failed_apply_timer_kept bad_logging_path options_without_value value_limits foreign_qdiscs ssh_guard ssh_guard_duration check_clean check_clean_namespace \
     update
 do
     run_test "$t"

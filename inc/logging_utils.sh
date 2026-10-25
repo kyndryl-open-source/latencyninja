@@ -13,13 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-# Function to log execution details to the log file
-log_execution() {
+# Function to check that the log file can be written, so a bad --logging path is reported before rules are applied
+check_log_file() {
     local log_file="$1"
-    shift
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-
     local log_dir
     log_dir=$(dirname "$log_file")
 
@@ -32,6 +28,16 @@ log_execution() {
     elif [ ! -f "$log_file" ] && [ ! -w "$log_dir" ]; then
         die "Log directory is not writable: $log_dir"
     fi
+}
+
+# Function to log execution details to the log file
+log_execution() {
+    local log_file="$1"
+    shift
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    check_log_file "$log_file"
 
     {
         echo "[$timestamp] Execution Start"

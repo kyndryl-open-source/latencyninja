@@ -104,7 +104,7 @@ All four are percentages and accept decimals:
     sudo ./latencyninja -i eth0 -d 192.168.100.123 --corrupt 0.1          # flip a bit in 0.1% of packets
     sudo ./latencyninja -i eth0 -d 192.168.100.123 --latency 50 --reorder 5   # send 5% of packets out of order
 
-Reordering works by sending some packets without the delay, so combine it with `--latency`.
+Reordering works by sending some packets without the delay, so it needs `--latency` (it is rejected without it).
 
 Drop everything to a destination (simulate an unreachable dependency):
 
@@ -173,7 +173,9 @@ Every value is validated and cleaned before anything is applied, whether it come
 - Spaces around values are ignored, and `direction`, `rate` and `duration` are case insensitive (`BOTH`, `2Mbit`, `10M` work).
 - `latency` and `jitter` are positive numbers, optionally followed by `ms` (`50`, `2.5`, `50ms`). The percentages (`packet_loss`, `duplicate`, `corrupt`, `reorder`) are positive numbers up to 100, optionally followed by `%` (`0.9`, `0.9%`). Anything else (`abc50`, `1.2.3`, `1e3`, `150`) is rejected, and numbers are written back without extra zeros (`005` becomes `5`).
 - IP addresses must be valid IPv4 (each part 0-255, prefix length 0-32) and ports numbers from 0 to 65535. Leading zeros are removed (so `010.0.0.1` is never read as octal), duplicates are dropped, and an empty port (`10.0.0.1:`) is an error.
-- A warning is printed, and the rules are still applied, when the jitter is larger than the latency or when `--reorder` is used without `--latency`.
+- `latency` and `jitter` can't be more than 274877 ms (about 4.5 minutes) in one direction, which is the most `tc` accepts, so with `--direction both` (which splits them between the two directions) the limit is 549754 ms. Rates must be between 1bps (8bit) and 100000gbit.
+- `--reorder` needs `--latency` (reordering works by delaying some packets), and is rejected without it, as `tc` does.
+- A warning is printed, and the rules are still applied, when the jitter is larger than the latency.
 
 ## Profiles
 

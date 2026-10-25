@@ -35,6 +35,7 @@ declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder="
 declare -g direction="both"  # Traffic direction for shaping (options: both, inbound, outbound).
 declare -g interface_provided=0 jitter_provided=0 latency_provided=0  # Flags for user-provided options.
 declare -g rollback_required=0 rollback_done=0 ips_swapped=0  # Flags for script behavior and state.
+declare -g replace_foreign_qdiscs=0 apply_in_progress=0 backup_file=""  # Replacing qdiscs we didn't set up, undoing a failed apply.
 
 # Backup and Logging
 declare -g backup_dir="" log_file=""
@@ -57,7 +58,7 @@ declare -g allow_ssh=0 check_mode=0 clean_mode=0 assume_yes=0 dry_run=0
 
 # Function to check full paths of commands
 find_command_paths() {
-    local required_commands=("tc" "ping" "ip" "modprobe" "curl" "jq")
+    local required_commands=("tc" "ip" "modprobe" "curl" "jq")
 
     # git is only required for --update
     if [[ "$update_requested" -eq 1 ]]; then

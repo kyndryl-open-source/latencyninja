@@ -32,10 +32,10 @@ configure_ingress_traffic_controls() {
     # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
         if [ -n "$latency" ]; then
-            latency=$(awk "BEGIN {print $latency / 2}")
+            latency=$(awk -v v="$latency" 'BEGIN {printf "%.10g", v / 2}')
         fi       
         if [ -n "$jitter" ]; then
-            jitter=$(awk "BEGIN {print $jitter / 2}")
+            jitter=$(awk -v v="$jitter" 'BEGIN {printf "%.10g", v / 2}')
         fi
     fi
     
@@ -102,10 +102,10 @@ configure_egress_traffic_controls() {
     # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
         if [ -n "$latency" ]; then
-            latency=$(awk "BEGIN {print $latency / 2}")
+            latency=$(awk -v v="$latency" 'BEGIN {printf "%.10g", v / 2}')
         fi        
         if [ -n "$jitter" ]; then
-            jitter=$(awk "BEGIN {print $jitter / 2}")
+            jitter=$(awk -v v="$jitter" 'BEGIN {printf "%.10g", v / 2}')
         fi
     fi
 
