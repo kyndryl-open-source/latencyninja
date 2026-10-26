@@ -47,9 +47,9 @@ get_arguments() {
             --profiles) list_profiles; exit 0 ;;
             -t|--duration) process_arg duration "" "$@"; shift 2 ;;
             --timed-rollback) process_arg timed_rollback_file "" "$@"; shift 2 ;;
-            --json) json_file="$2"; shift 2 ;;
-            --backup) backup_dir="$2"; shift 2 ;;
-            --logging) log_file="$2"; shift 2 ;;
+            --json) process_arg json_file "" "$@"; shift 2 ;;
+            --backup) process_arg backup_dir "" "$@"; shift 2 ;;
+            --logging) process_arg log_file "" "$@"; shift 2 ;;
             --save) process_arg save_file "" "$@"; shift 2 ;;
             --restore) process_arg restore_file "" "$@"; shift 2 ;;
             --persist) persist=1; shift ;;
@@ -215,16 +215,26 @@ validate_arguments() {
         # die() inside $(...) only exits the subshell, so propagate the failure
         duration_seconds=$(parse_duration "$duration") || { echo "$duration_seconds"; exit 1; }
     fi
+    # tc refuses reordering without a delay: packets are only reordered when some of them are delayed
+    if [ -n "$reorder" ] && [ -z "$latency" ]; then
+        die "Reorder can only be used with latency. Use --help for usage information."
+    fi
+    if [ "$direction" != "both" ]; then
+        { [ -n "$latency" ] && ! awk -v v="$latency" -v m="$max_delay_ms" 'BEGIN{exit !(v<=m)}'; } || \
+        { [ -n "$jitter" ] && ! awk -v v="$jitter" -v m="$max_delay_ms" 'BEGIN{exit !(v<=m)}'; } &&
+            die "Latency and jitter can't be more than $max_delay_ms ms in one direction (a limit of tc)."
+    fi
     warn_suspicious_parameters
 }
+
+# The largest delay tc accepts in one direction in ms (it stores times as 32 bit ticks of 64 ns); --direction both
+# splits the latency and jitter between the two directions
+declare -g max_delay_ms=274877
 
 # Function to warn about combinations that are accepted but probably not what was intended
 warn_suspicious_parameters() {
     if [ -n "$jitter" ] && [ -n "$latency" ] && awk -v j="$jitter" -v l="$latency" 'BEGIN{exit !(j>l)}'; then
         echo "Warning: the jitter ($jitter ms) is larger than the latency ($latency ms)." >&2
-    fi
-    if [ -n "$reorder" ] && [ -z "$latency" ]; then
-        echo "Warning: --reorder has no effect without --latency, packets are only reordered when some are delayed." >&2
     fi
 }
 
@@ -234,7 +244,7 @@ check_numeric() {
     local name="$1"
     local value="${!name}" unit="%" max=100
     case "$name" in
-        latency|jitter) unit="ms"; max="" ;;
+        latency|jitter) unit="ms"; max=$((max_delay_ms * 2)) ;;
     esac
 
     trim_value "$value"
@@ -244,17 +254,29 @@ check_numeric() {
     if ! [[ "$value" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] || ! awk -v v="$value" 'BEGIN{exit !(v>0)}'; then
         die "Invalid $name format. Use a positive numeric value for $name."
     fi
-    if [ -n "$max" ] && ! awk -v v="$value" -v m="$max" 'BEGIN{exit !(v<=m)}'; then
-        die "Invalid $name format. $name is a percentage and can't be more than $max."
+    if ! awk -v v="$value" -v m="$max" 'BEGIN{exit !(v<=m)}'; then
+        if [ "$unit" = "%" ]; then
+            die "Invalid $name format. $name is a percentage and can't be more than $max."
+        fi
+        die "Invalid $name format. $name can't be more than $max ms ($max_delay_ms ms in one direction, a limit of tc)."
     fi
     declare -g "$name=$(awk -v v="$value" 'BEGIN{OFMT="%.10g"; print v+0}')"
 }
 
 # Function to validate a bandwidth rate in tc units (e.g. 512kbit, 2mbit, 1gbit, 10mbps)
 validate_rate() {
+    local number unit
     if ! [[ "$1" =~ ^[0-9]+(\.[0-9]+)?(bit|kbit|mbit|gbit|bps|kbps|mbps|gbps)$ ]] || ! awk -v v="${1%%[a-z]*}" 'BEGIN{exit !(v>0)}'; then
         die "Invalid rate format. Use a positive number with a unit: bit, kbit, mbit, gbit (bits/s) or bps, kbps, mbps, gbps (bytes/s), e.g. 2mbit."
     fi
+    # tc silently wraps rates that don't fit its counters and treats less than 1 byte per second as no limit
+    number="${1%%[a-z]*}"
+    unit="${1#"$number"}"
+    awk -v n="$number" -v u="$unit" 'BEGIN {
+        m["bit"] = 1; m["kbit"] = 1e3; m["mbit"] = 1e6; m["gbit"] = 1e9
+        m["bps"] = 8; m["kbps"] = 8e3; m["mbps"] = 8e6; m["gbps"] = 8e9
+        exit !(n * m[u] >= 8 && n * m[u] <= 1e14)
+    }' || die "Invalid rate. The rate must be between 1bps (8bit) and 100000gbit."
 }
 
 # Function to convert a duration (e.g. 90, 30s, 10m, 2h, 1d) to seconds
@@ -266,14 +288,6 @@ parse_duration() {
     local seconds=$((10#$amount * ${factor[$unit]}))
     [ "$seconds" -gt 0 ] || die "Invalid duration format. The duration must be greater than zero."
     echo "$seconds"
-}
-
-# Function to validate the interface
-validate_interface() {
-    local interface="$1"
-    if ! ip link show "$interface" &>/dev/null; then
-        die "Invalid interface: $interface. Please provide a valid network interface."
-    fi
 }
 
 # Function to process the --src_ip argument

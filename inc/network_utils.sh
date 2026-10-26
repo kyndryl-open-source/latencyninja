@@ -13,13 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
-# Function to determine if a destination is a single host IP or a network
-is_single_host() {
-    local host="$1" ip_part="${host%%/*}" subnet_mask="${host#*/}"
-    [[ "$host" == *"/"* ]] && { IFS='.' read -ra ip_octets <<< "$ip_part"; [[ "$subnet_mask" =~ ^[0-9]+$ ]] && ((subnet_mask >= 0 && subnet_mask <= 32)) && { [[ ${#ip_octets[@]} -gt 1 || "$subnet_mask" != "32" ]] && return 1; }; }
-    return 0
-}
-
 # Function to list network devices. Uses ip rather than /sys/class/net, which keeps showing the
 # host's devices inside a namespace entered with nsenter --net.
 list_network_devices() {
@@ -106,15 +99,20 @@ rollback_everything() {
             die "Missing required global variables in rollback_everything function."
         fi
         
-        # Remove tc Filters
-        $tc_path filter del dev "$eth_interface" parent 1: 2>/dev/null
-        $tc_path filter del dev "$eth_interface" parent ffff: 2>/dev/null
-        
-        # Flush tc qdiscs
+        # The qdiscs of the interface are only removed when they are ours (the root prio 1: and the ingress qdisc
+        # redirecting to an ifb device), unless the rules are about to be replaced
+        if [ "$replace_foreign_qdiscs" -eq 1 ] || $tc_path qdisc show dev "$eth_interface" 2>/dev/null | grep -q '^qdisc prio 1: root'; then
+            $tc_path filter del dev "$eth_interface" parent 1: 2>/dev/null
+            $tc_path qdisc del dev "$eth_interface" root 2>/dev/null
+        fi
+        if [ "$replace_foreign_qdiscs" -eq 1 ] || $tc_path filter show dev "$eth_interface" ingress 2>/dev/null | grep -q 'Redirect to device'; then
+            $tc_path filter del dev "$eth_interface" parent ffff: 2>/dev/null
+            $tc_path qdisc del dev "$eth_interface" ingress 2>/dev/null
+        fi
+
+        # Flush the qdiscs of the ifb devices
         $tc_path qdisc del dev "$ifb0_interface" root 2>/dev/null
         $tc_path qdisc del dev "$ifb1_interface" root 2>/dev/null
-        $tc_path qdisc del dev "$eth_interface" ingress 2>/dev/null
-        $tc_path qdisc del dev "$eth_interface" root 2>/dev/null
         
         # Remove ifb virtual interfaces
         $ip_path link delete dev "$ifb0_interface" 2>/dev/null
@@ -122,6 +120,47 @@ rollback_everything() {
         
         rollback_done=1
     fi
+}
+
+# Function to warn when applying rules replaces qdiscs that Latency Ninja didn't set up. They are removed (a root
+# qdisc and an ingress or clsact qdisc are needed for the rules) and --rollback doesn't bring them back.
+warn_foreign_qdiscs() {
+    local interface="$1" root type
+    root=$($tc_path qdisc show dev "$interface" 2>/dev/null | awk '$1 == "qdisc" && $4 == "root" {print $2, $3; exit}')
+    case "$root" in
+        ""|"prio 1:"|noqueue*|mq*|pfifo_fast*|fq_codel*|"fq "*|pfifo*|bfifo*) ;;
+        *) echo "Warning: $interface has a ${root% *} root qdisc, which is replaced by the rules and not restored by --rollback (the previous qdiscs are recorded in the backup file)." >&2 ;;
+    esac
+    type=$($tc_path qdisc show dev "$interface" 2>/dev/null | awk '$1 == "qdisc" && ($2 == "clsact" || $2 == "ingress") {print $2; exit}')
+    if [ "$type" = "clsact" ] || { [ "$type" = "ingress" ] && ! $tc_path filter show dev "$interface" ingress 2>/dev/null | grep -q 'Redirect to device'; }; then
+        echo "Warning: $interface has an $type qdisc (e.g. for eBPF programs or ingress filters), which is replaced by the rules and not restored by --rollback." >&2
+    fi
+}
+
+# Function to undo a failed apply (including Ctrl-C): remove what was set up and bring back the rules from before
+undo_failed_apply() {
+    local code=$?
+    [ "$apply_in_progress" -eq 1 ] || return 0
+    apply_in_progress=0
+    trap - EXIT
+    echo >&2
+    echo "Applying the rules failed, restoring the previous rules of $eth_interface." >&2
+    # Restoring re-applies the previous rules, which cancels their pending timed rollback: keep it
+    local left=0 pending_backup=""
+    if [ -f "$state_dir/$eth_interface.expires" ] && [ -f "$state_dir/$eth_interface.backup" ]; then
+        left=$(( $(cat "$state_dir/$eth_interface.expires") - $(date +%s) ))
+        pending_backup=$(cat "$state_dir/$eth_interface.backup")
+    fi
+    rollback_done=0
+    replace_foreign_qdiscs=1
+    rollback_everything silent
+    if [ -f "$backup_file" ] && ( restore_snapshot "$backup_file" "$eth_interface" ) &>/dev/null; then
+        echo "Previous rules restored." >&2
+        [ "$left" -gt 0 ] && [ -f "$pending_backup" ] && schedule_rollback "$eth_interface" "$left" "$pending_backup" >/dev/null
+    else
+        echo "The previous rules could not be restored, see: sudo $0 --restore $backup_file$(namespace_hint)" >&2
+    fi
+    exit "$code"
 }
 
 # Function to describe the Latency Ninja state of an interface (rules, persistence, timed rollback)

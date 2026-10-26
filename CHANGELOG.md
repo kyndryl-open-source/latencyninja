@@ -1,3 +1,14 @@
+CHANGELOG 1.28.1
+- Fixed an endless loop (a silent 100% CPU spin) when --json, --backup or --logging was the last argument without a value; they now report that the option requires an argument
+- A failed or interrupted (Ctrl-C) apply now puts the interface back as it was: before, an error from tc left an ifb device, an ingress qdisc and redirects behind, and --check reported nothing wrong. The pending timed rollback of the previous rules is kept
+- An unwritable --logging path is reported before any rules are applied. Before, the rules stayed applied and, with --duration, no rollback timer was scheduled, so the safety net was missing. --dry-run checks it too
+- --reorder without --latency is an error, as tc refuses it (it was a warning, followed by a half-applied failure)
+- latency and jitter above what tc accepts (274877 ms per direction) and absurd or unusable rates are rejected; tc silently wrapped some of them into other values. The latency and jitter split for --direction both keeps its precision
+- --rollback only removes the qdiscs Latency Ninja set up, and applying rules warns when it replaces a qdisc you configured (htb, cake, clsact...); before, --rollback deleted the root and ingress qdiscs of an interface even when Latency Ninja had never touched it
+- ping, iputils and inetutils-ping are no longer required: nothing used ping, and on Debian and Ubuntu the check offered to install inetutils-ping, which replaces iputils-ping (and removes ubuntu-minimal)
+- Removed unused code, including a debug helper
+- Tests: the failed apply test uses a tc that fails (it used a value that is now rejected by validation); new tests for every fix above
+
 CHANGELOG 1.28
 - Added --dry-run: validates the options like a normal run, including the SSH lockout guard, and prints the tc/ip commands that would be run without changing anything (no rules, backup, log, persistence or timer); it can't be combined with --rollback, --check, --clean, --save, --restore or --apply-persisted
 - The egress filter for rules with swapped source and destination no longer prints the port and "Running:" debug lines

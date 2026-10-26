@@ -47,8 +47,8 @@ This program is distributed under the GNU General Public License (GPL), it is di
 ## Prerequisites
 
 1. Latency Ninja requires the following packages installed on the system, however it will also attempt to dnf install/apt install missing packages:
-      - CentOS/Fedora/Red Hat: kmod, iproute, kernel-modules-extra, iproute-tc, iputils, curl, jq
-      - Debian/Ubuntu: kmod, iproute2, inetutils-ping, curl, jq
+      - CentOS/Fedora/Red Hat: kmod, iproute, kernel-modules-extra, iproute-tc, curl, jq
+      - Debian/Ubuntu: kmod, iproute2, curl, jq
       - git is also required to use `--update`.
       - `--persist` and `--duration` require systemd.
 2. `root` or `sudo` privileges are required.
@@ -332,6 +332,8 @@ To update Latency Ninja to the lastest version, run:
 
 ## Warning
 - Changes made by Latency Ninja do not persist after a reboot or when an interface is re-created unless `--persist` is used.
+- Latency Ninja needs the root qdisc of the interface and an ingress qdisc. Default qdiscs (`mq`, `fq_codel`, `noqueue`...) are replaced silently and come back by themselves on rollback; a qdisc you configured yourself (e.g. `htb`, `cake`, `clsact`) is replaced with a warning and is not restored by `--rollback`. `--rollback` only removes the qdiscs Latency Ninja set up.
+- If applying the rules fails or is interrupted (Ctrl-C), the interface is put back as it was.
 
 ## Troubleshooting
  - Permission Denied: Make sure you're running the script with superuser privileges.
