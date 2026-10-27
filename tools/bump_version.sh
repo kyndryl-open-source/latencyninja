@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Start a new Latency Ninja version: updates version.txt and adds a CHANGELOG entry.
+# Start a new Latency Ninja version: updates version.txt. The CHANGELOG entry is written by hand.
 #
 # Usage:
 #   tools/bump_version.sh [minor|major|X.Y] [--branch]
@@ -47,10 +47,5 @@ fi
 
 echo "$new" > version.txt
 
-if ! grep -qx "CHANGELOG $new" CHANGELOG.md; then
-    { printf 'CHANGELOG %s\n- \n\n' "$new"; cat CHANGELOG.md; } > CHANGELOG.md.tmp
-    mv CHANGELOG.md.tmp CHANGELOG.md
-fi
-
 echo "Version bumped: $base -> $new"
-echo "Next: describe your changes under 'CHANGELOG $new' in CHANGELOG.md, then open a PR to main."
+echo "Next: add a 'CHANGELOG $new' section at the top of CHANGELOG.md (CI requires it), then open a PR to main."

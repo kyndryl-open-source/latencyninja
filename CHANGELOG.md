@@ -1,3 +1,6 @@
+CHANGELOG 1.28.4
+- tools/bump_version.sh no longer adds a CHANGELOG stub, it only updates version.txt; the CHANGELOG entry is written by hand and CI still requires it (CONTRIBUTING.md updated)
+
 CHANGELOG 1.28.3
 - Roadmap: added the open issues that are not done yet: curl required only with --update and a curl (HTTP/TCP) probe (1.29), management traffic exclusions for DHCP and ARP (1.30), different ingress and egress values in one rule set (1.31), and an OVA/OVF appliance and a TUI (2.0)
 
