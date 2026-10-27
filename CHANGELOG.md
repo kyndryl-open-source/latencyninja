@@ -1,3 +1,6 @@
+CHANGELOG 1.28.5
+- Roadmap: added Windows support through WSL2 (1.34)
+
 CHANGELOG 1.28.4
 - tools/bump_version.sh no longer adds a CHANGELOG stub, it only updates version.txt; the CHANGELOG entry is written by hand and CI still requires it (CONTRIBUTING.md updated)
 

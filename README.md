@@ -346,6 +346,7 @@ To update Latency Ninja to the lastest version, run:
 - **1.31** More realistic conditions: per-direction values (e.g. `--egress-rate`, and different ingress and egress values in one rule set, #48), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
 - **1.32** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
 - **1.33** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
+- **1.34** Windows through WSL2: detect WSL, check that its kernel has `netem`, `ifb` and `mirred` (the default WSL kernel may not) and explain how to use a custom kernel when it does not, and document that only the traffic of the WSL virtual network is shaped, not the Windows host's.
 - **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions, an OVA/OVF appliance with a setup wizard (#8) and a TUI (#15). Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
 
 ## Examples for Testers
