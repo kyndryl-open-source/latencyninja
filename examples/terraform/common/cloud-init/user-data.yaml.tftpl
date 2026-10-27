@@ -1,0 +1,34 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+package_update: false
+package_upgrade: false
+
+users:
+  - name: ${user}
+    groups: [sudo, wheel]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+%{ for k in ssh_keys ~}
+      - ${k}
+%{ endfor ~}
+
+write_files:
+  - path: /usr/local/sbin/ln-provision
+    permissions: "0755"
+    encoding: b64
+    content: ${provision_b64}
+  - path: /etc/latencyninja-lab.env
+    permissions: "0644"
+    content: |
+      ROLE=${role}
+      FAMILY=${family}
+      REPO_URL=${repo_url}
+      REPO_REF=${repo_ref}
+      LAB_IP=${lab_ip}
+      ROUTE_NET=${route_net}
+      ROUTE_VIA=${route_via}
+
+runcmd:
+  - [bash, -c, "/usr/local/sbin/ln-provision > /var/log/ln-provision.log 2>&1; echo $? > /var/lib/ln-provision.rc"]

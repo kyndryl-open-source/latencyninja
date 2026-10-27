@@ -1,0 +1,8 @@
+subscription_id   = "00000000-0000-0000-0000-000000000000"
+location          = "westeurope"
+ssh_public_keys   = ["ssh-ed25519 AAAA... you@laptop"]
+allowed_ssh_cidrs = ["203.0.113.7/32"]   # your public address
+
+test_distros = ["ubuntu", "rocky"]        # add "debian"
+enable_lab   = true
+repo_ref     = "main"

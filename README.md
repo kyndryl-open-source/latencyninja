@@ -348,6 +348,10 @@ To update Latency Ninja to the lastest version, run:
 - **1.33** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
 - **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions. Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
 
+## Examples for Testers
+
+[`examples/`](examples/README.md) has example Terraform (Proxmox, AWS, Azure, Google Cloud), a plain QEMU script and a Docker lab for human testers: distro VMs for the test suite, client/server labs for real-traffic tests and container targeting. They are guidance and are not run by CI.
+
 ## Contributing
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, tests and release process.
 

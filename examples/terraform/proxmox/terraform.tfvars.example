@@ -1,0 +1,18 @@
+proxmox_endpoint = "https://pve.example.com:8006/"
+# export TF_VAR_proxmox_api_token='user@pve!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+node_name = "pve"
+
+disk_datastore    = "local-lvm"
+image_datastore   = "local"   # needs the 'import' content type
+snippet_datastore = "local"   # needs the 'snippets' content type
+bridge            = "vmbr0"   # DHCP network you can SSH from
+
+ssh_public_keys = ["ssh-ed25519 AAAA... you@laptop"]
+
+test_distros = ["ubuntu", "fedora"]   # add "debian", "rocky"
+repo_ref     = "main"
+
+# Lab with a router between two segments (leave both empty for a flat client/server lab)
+enable_lab   = true
+lab_bridge_a = ""   # e.g. "vmbr1"
+lab_bridge_b = ""   # e.g. "vmbr2", or vmbr1 with lab_vlan_a/lab_vlan_b set

@@ -1,0 +1,32 @@
+# Two containers on a private network. Apply rules to either one from the host:
+#   sudo ./latencyninja --container ln-client --interface eth0 --dst_ip 10.99.1.20 --latency 100
+name: latencyninja
+
+services:
+  server:
+    build: .
+    image: latencyninja-lab
+    container_name: ln-server
+    # Listeners on the ports the --dst_ip port examples use, plus iperf3
+    command: >
+      sh -c "for p in 80 443 8080 9090; do python3 -m http.server $$p --directory /tmp & done;
+             exec iperf3 -s"
+    networks:
+      lab:
+        ipv4_address: 10.99.1.20
+
+  client:
+    build: .
+    image: latencyninja-lab
+    container_name: ln-client
+    command: sleep infinity
+    depends_on: [server]
+    networks:
+      lab:
+        ipv4_address: 10.99.1.10
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: 10.99.1.0/24
