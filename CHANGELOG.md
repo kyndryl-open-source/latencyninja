@@ -1,5 +1,6 @@
 CHANGELOG 1.28.3
 - Roadmap: added the open issues that are not done yet: curl required only with --update and a curl (HTTP/TCP) probe (1.29), management traffic exclusions for DHCP and ARP (1.30), different ingress and egress values in one rule set (1.31), and an OVA/OVF appliance and a TUI (2.0)
+- tools/bump_version.sh no longer adds a CHANGELOG stub, it only updates version.txt; the CHANGELOG entry is written by hand and CI still requires it (CONTRIBUTING.md updated)
 
 CHANGELOG 1.28.2
 - Added examples/: guidance for human testers to try Latency Ninja on real hosts. examples/terraform builds VMs on Proxmox, AWS, Azure and Google Cloud (distro VMs that run the functional suite, Ubuntu, Debian, Fedora and Rocky where the platform has them, and a client/server lab, with an optional router on Proxmox); examples/qemu does the same on a workstation with plain QEMU (no libvirt, no root, KVM or HVF); examples/docker is a client/server container lab with a walk-through of --container. Not part of the tool: CI does not lint or run any of it

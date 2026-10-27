@@ -15,9 +15,9 @@ Each release is developed on a branch named after its version, then merged into 
        tools/bump_version.sh --branch          # 1.22 -> 1.23, creates branch 1.23
        tools/bump_version.sh major --branch    # 1.22 -> 2.0
 
-   This updates `version.txt` (the single source of truth: `--version` and the updater read it) and adds a `CHANGELOG <version>` section to `CHANGELOG.md`.
+   This updates `version.txt` (the single source of truth: `--version` and the updater read it). It does not touch `CHANGELOG.md`.
 
-2. Make your changes and list them under the new version in `CHANGELOG.md`.
+2. Make your changes and add a `CHANGELOG <version>` section at the top of `CHANGELOG.md` listing them.
 
 3. Run the test suite in a VM (see [tests/README.md](tests/README.md)):
 
