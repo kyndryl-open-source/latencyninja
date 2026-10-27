@@ -341,12 +341,12 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- **1.29** Safety and automation: JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`.
-- **1.30** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic.
-- **1.31** More realistic conditions: per-direction values (e.g. `--egress-rate`), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
+- **1.29** Safety and automation: JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`. `curl` required only with `--update` (#47). Probing with `curl` (HTTP/TCP) to measure application response time, not only ICMP (#24).
+- **1.30** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic. Exclusions for management traffic such as DHCP and ARP, next to the SSH lockout guard (#7).
+- **1.31** More realistic conditions: per-direction values (e.g. `--egress-rate`, and different ingress and egress values in one rule set, #48), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
 - **1.32** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
 - **1.33** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
-- **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions. Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
+- **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions, an OVA/OVF appliance with a setup wizard (#8) and a TUI (#15). Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
 
 ## Examples for Testers
 
