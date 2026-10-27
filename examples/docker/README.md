@@ -9,6 +9,8 @@ Two containers on a private network, and a walk-through that applies Latency Nin
 
 Latency Ninja is not inside the containers. It runs on the host and enters the container's network namespace with `--container`, so only that container's traffic changes.
 
+Topology diagram: [`topology.txt`](topology.txt).
+
 ## Requirements
 
 - A **Linux host** with Docker (or Podman), root access, and Latency Ninja's own requirements (`tc`, the `ifb` and `sch_netem` modules). Docker Desktop on macOS or Windows does not work: the containers live in a VM, not on the host Latency Ninja runs on.

@@ -19,3 +19,6 @@ examples/qemu/qemu-lab.sh status | down | destroy
 - **Architecture:** the guest matches the host, since emulating another architecture is far too slow to be useful. On arm64 hosts QEMU needs UEFI firmware: Homebrew's qemu ships it, on Debian/Ubuntu install `qemu-efi-aarch64`.
 - Needs an ISO tool for the cloud-init seed: `cloud-localds`, `genisoimage`, `mkisofs`, `xorriso` or macOS's `hdiutil`.
 - Without KVM or HVF the script falls back to TCG and warns: the suite is too slow to be practical that way.
+
+Topology diagram: [`topology.txt`](topology.txt).
+

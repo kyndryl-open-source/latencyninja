@@ -1,0 +1,20 @@
+Latency Ninja Docker lab
+
+ +------------------------------ Linux host (root) ------------------------------+
+ |                                                                                |
+ |   sudo ./latencyninja --container ln-client --interface eth0 --dst_ip ...      |
+ |                 |                                                              |
+ |                 | enters the container's network namespace                     |
+ |                 v                                                              |
+ |        +---------------+   docker network 10.99.1.0/24   +---------------+     |
+ |        |   ln-client   +----------------------------------+   ln-server   |     |
+ |        |  10.99.1.10   |  rules apply only to this        |  10.99.1.20   |     |
+ |        |  ping, curl,  |  container's traffic             | :80 :443 :8080|     |
+ |        |  iperf3       |                                  | :9090 iperf3  |     |
+ |        +---------------+                                  +---------------+     |
+ |                                                                                |
+ +--------------------------------------------------------------------------------+
+
+ Latency Ninja runs on the host, not in the containers. Docker Desktop (macOS, Windows)
+ does not work: its containers live in a VM, not on the host Latency Ninja runs on.
+ The functional suite (tests/run_tests.sh) needs a VM, never a container.

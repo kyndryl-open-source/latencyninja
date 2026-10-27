@@ -9,6 +9,8 @@ Reference Terraform for **human testers**. It is not part of the tool and is not
 
 No router VM here: AWS does not let you override the local VPC route to steer traffic through an instance. Use the Proxmox example if you need a routed lab.
 
+Topology diagram: [`topology.txt`](topology.txt).
+
 ## Use
 
 ```sh

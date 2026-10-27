@@ -1,0 +1,19 @@
+Latency Ninja test lab with plain QEMU
+
+ +------------------------------ your laptop / workstation ------------------------------+
+ |                                                                                        |
+ |  127.0.0.1:2211 --ssh--> +-----------+  socket link        +-----------+ <--ssh--      |
+ |   (user-mode NIC)        | ln-client +---------------------+ ln-server |  127.0.0.1:   |
+ |                          | 10.99.1.10|  10.99.1.0/24       | 10.99.1.20|  2212         |
+ |                          +-----------+  (server listens,   | :80 :443  |               |
+ |                                          client connects)  | :8080 :9090               |
+ |                                                            | iperf3 -s |               |
+ |                                                            +-----------+               |
+ |                                                                                        |
+ |  127.0.0.1:2201-2204 --ssh--> ln-ubuntu / ln-debian / ln-fedora / ln-rocky             |
+ |                               (independent distro VMs for tests/run_tests.sh)          |
+ |                                                                                        |
+ +----------------------------------------------------------------------------------------+
+
+ Each VM also has a user-mode NIC (internet access, SSH forwarded to 127.0.0.1).
+ No router, no bridge, no root. The guest architecture matches the host (KVM or HVF).

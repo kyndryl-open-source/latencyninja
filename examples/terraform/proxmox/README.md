@@ -9,6 +9,8 @@ Terraform (bpg/proxmox provider) that builds VMs for exercising every Latency Ni
 
 Lab addressing with `lab_bridge_a`/`lab_bridge_b` set: client `10.99.1.10`, router `10.99.1.1` / `10.99.2.1`, server `10.99.2.20`. Without them, client and server share `bridge` (DHCP) and there is no router. Every VM also gets a DHCP NIC on `bridge` for SSH.
 
+Topology diagram: [`topology.txt`](topology.txt).
+
 ## Proxmox prerequisites
 
 - API token with VM, datastore and SDN-free permissions (a `PVEVMAdmin` + `PVEDatastoreAdmin` role on `/` is enough).

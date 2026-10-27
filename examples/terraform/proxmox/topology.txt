@@ -1,0 +1,30 @@
+Latency Ninja test lab on Proxmox
+
+Distro VMs (independent of each other; pick them with test_distros)
+
+   you --ssh-->  +--------------+ +--------------+ +--------------+ +--------------+
+                 |  ln-ubuntu   | |  ln-debian   | |  ln-fedora   | |   ln-rocky   |
+                 |              | |              | |              | |              |
+                 |  ln-test --> tests/run_tests.sh (builds its own netns, veth, bond, wg)
+                 +--------------+ +--------------+ +--------------+ +--------------+
+   Available here: ubuntu, debian, fedora, rocky
+   Each VM has one NIC on the management bridge (vmbr0, DHCP).
+
+Client / router / server lab (the only routed one; needs lab_bridge_a and lab_bridge_b)
+
+                  management bridge (bridge, DHCP): SSH to every VM
+        +-------------------+----------------------+-------------------+
+        |                   |                      |                   |
+ +------+------+     +------+------+        +------+------+
+ |  ln-client  |     |  ln-router  |        |  ln-server  |
+ |             |     | ip_forward  |        | :80 :443    |
+ | 10.99.1.10  +-----+ .1       .1 +--------+ :8080 :9090 |
+ +-------------+  A  +-------------+   B    | iperf3 -s   |
+          10.99.1.0/24         10.99.2.0/24  | 10.99.2.20  |
+          (lab_bridge_a)       (lab_bridge_b)+-------------+
+
+ Apply rules on the client or the router, measure to the server.
+ Client and server route to the far segment through the router (ln-lab-route unit).
+
+Without lab bridges the lab is flat: client and server share the management bridge (DHCP)
+and there is no router.

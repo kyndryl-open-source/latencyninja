@@ -9,6 +9,8 @@ Reference Terraform for **human testers**. It is not part of the tool and is not
 
 No router VM here; use the Proxmox example for a routed lab.
 
+Topology diagram: [`topology.txt`](topology.txt).
+
 ## Use
 
 ```sh
