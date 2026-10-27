@@ -1,3 +1,6 @@
+CHANGELOG 1.28.2
+- Added examples/: guidance for human testers to try Latency Ninja on real hosts. examples/terraform builds VMs on Proxmox, AWS, Azure and Google Cloud (distro VMs that run the functional suite, Ubuntu, Debian, Fedora and Rocky where the platform has them, and a client/server lab, with an optional router on Proxmox); examples/qemu does the same on a workstation with plain QEMU (no libvirt, no root, KVM or HVF); examples/docker is a client/server container lab with a walk-through of --container. Not part of the tool: CI does not lint or run any of it
+
 CHANGELOG 1.28.1
 - Fixed an endless loop (a silent 100% CPU spin) when --json, --backup or --logging was the last argument without a value; they now report that the option requires an argument
 - A failed or interrupted (Ctrl-C) apply now puts the interface back as it was: before, an error from tc left an ifb device, an ingress qdisc and redirects behind, and --check reported nothing wrong. The pending timed rollback of the previous rules is kept

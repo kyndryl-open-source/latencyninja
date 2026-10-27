@@ -1,0 +1,28 @@
+Latency Ninja test lab on AWS
+
+Distro VMs (independent of each other; pick them with test_distros)
+
+   you --ssh-->  +--------------+ +--------------+ +--------------+ +--------------+
+                 |  ln-ubuntu   | |  ln-debian   | |  ln-fedora   | |   ln-rocky   |
+                 |              | |              | |              | |              |
+                 |  ln-test --> tests/run_tests.sh (builds its own netns, veth, bond, wg)
+                 +--------------+ +--------------+ +--------------+ +--------------+
+   Available here: ubuntu, debian, fedora, rocky
+
+Client/server lab (flat, no router: the cloud does not let you steer traffic through a VM)
+
+     Internet -- SSH only from allowed_ssh_cidrs
+         |
+   +-----+---- VPC 10.99.0.0/16, subnet 10.99.1.0/24
+   |
+   |   +-------------+      +-------------+      +-------------+
+   |   |  ln-client  |----->|  ln-server  |      | ln-<distro> |
+   |   | 10.99.1.10  |      | 10.99.1.20  |      |  (test VMs) |
+   |   +-------------+      | :80 :443    |      +-------------+
+   |                        | :8080 :9090 |
+   |                        | iperf3 -s   |
+   |                        +-------------+
+   +--------------------------------------------------------------
+
+Apply rules on ln-client (or ln-server) and measure to the other with ping, curl and iperf3.
+Every VM has a public IP for SSH and a private 10.99.1.x address.

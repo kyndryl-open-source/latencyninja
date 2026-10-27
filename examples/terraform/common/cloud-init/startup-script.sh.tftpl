@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# For clouds without cloud-init user data (GCP startup-script): create the user, write the env, run the shared provisioner.
+set -eu
+[ -f /var/lib/ln-provision.done ] && exit 0
+id ${user} >/dev/null 2>&1 || useradd -m -s /bin/bash ${user}
+echo '${user} ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-${user}
+chmod 440 /etc/sudoers.d/90-${user}
+cat > /etc/latencyninja-lab.env <<'EOS'
+ROLE=${role}
+FAMILY=${family}
+REPO_URL=${repo_url}
+REPO_REF=${repo_ref}
+LAB_IP=
+ROUTE_NET=
+ROUTE_VIA=
+EOS
+echo '${provision_b64}' | base64 -d > /usr/local/sbin/ln-provision
+chmod 755 /usr/local/sbin/ln-provision
+/usr/local/sbin/ln-provision > /var/log/ln-provision.log 2>&1
