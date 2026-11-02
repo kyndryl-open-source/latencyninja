@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Stand-in for systemctl in a parallel test shard, for the timers started by the systemd-run stand-in:
+# stop, is-active and reset-failed. Anything else fails, so a test that needs real units is noticed.
+units=/run/ln-shard/units
+quiet=0
+[ "$1" = "-q" ] && { quiet=1; shift; }
+action="$1"
+shift
+case "$action" in
+    stop)
+        for unit in "$@"; do
+            [ -f "$units/$unit" ] && { pid=$(cat "$units/$unit"); kill "$pid" 2>/dev/null; pkill -P "$pid" 2>/dev/null; rm -f "$units/$unit"; }
+        done
+        exit 0 ;;
+    is-active)
+        [ "$1" = "-q" ] && shift
+        [ -f "$units/$1" ] && kill -0 "$(cat "$units/$1")" 2>/dev/null ;;
+    reset-failed) exit 0 ;;
+    *) echo "systemctl stand-in: '$action' needs the real systemd, this test can't run in a parallel shard" >&2; exit 1 ;;
+esac

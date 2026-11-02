@@ -129,6 +129,10 @@ check_runtime_state() {
         [ -f "$file" ] || continue
         [ -f "${file%.backup}.expires" ] || add_finding fix "Backup reference $(basename "$file"): no timed rollback is pending" fix_stale_file "$file"
     done
+    for file in "$state_dir"/*.confirm; do
+        [ -f "$file" ] || continue
+        [ -f "${file%.confirm}.expires" ] || add_finding fix "Confirmation marker $(basename "$file"): no timed rollback is pending" fix_stale_file "$file"
+    done
 }
 
 # Function to find the state of containers and namespaces that are gone or were replaced (host only)
@@ -350,7 +354,7 @@ fix_stale_file() {
 }
 
 fix_stale_schedule() {
-    rm -f "$1" "${1%.expires}.backup"
+    rm -f "$1" "${1%.expires}.backup" "${1%.expires}.confirm"
 }
 
 fix_stale_dir() {

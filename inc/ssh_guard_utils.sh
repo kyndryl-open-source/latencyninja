@@ -114,5 +114,5 @@ check_ssh_lockout() {
         echo "Warning: these rules affect your SSH session from $affected on $eth_interface. They roll back automatically after $duration." >&2
         return 0
     fi
-    die "These rules would also affect your SSH session from $affected on $eth_interface and could lock you out. Exclude that address from --src_ip/--dst_ip, add --duration <time> so the rules roll back automatically, or add --allow-ssh to apply them anyway."
+    die "These rules would also affect your SSH session from $affected on $eth_interface and could lock you out. Exclude that address from --src_ip/--dst_ip, add --duration <time> (or --confirm-within <time>) so the rules roll back automatically, or add --allow-ssh to apply them anyway."
 }

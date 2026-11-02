@@ -146,16 +146,18 @@ undo_failed_apply() {
     echo >&2
     echo "Applying the rules failed, restoring the previous rules of $eth_interface." >&2
     # Restoring re-applies the previous rules, which cancels their pending timed rollback: keep it
-    local left=0 pending_backup=""
+    local left=0 pending_backup="" pending_confirm=0
     if [ -f "$state_dir/$eth_interface.expires" ] && [ -f "$state_dir/$eth_interface.backup" ]; then
         left=$(( $(cat "$state_dir/$eth_interface.expires") - $(date +%s) ))
         pending_backup=$(cat "$state_dir/$eth_interface.backup")
+        [ -f "$state_dir/$eth_interface.confirm" ] && pending_confirm=1
     fi
     rollback_done=0
     replace_foreign_qdiscs=1
     rollback_everything silent
     if [ -f "$backup_file" ] && ( restore_snapshot "$backup_file" "$eth_interface" ) &>/dev/null; then
         echo "Previous rules restored." >&2
+        confirm_pending=$pending_confirm
         [ "$left" -gt 0 ] && [ -f "$pending_backup" ] && schedule_rollback "$eth_interface" "$left" "$pending_backup" >/dev/null
     else
         echo "The previous rules could not be restored, see: sudo $0 --restore $backup_file$(namespace_hint)" >&2
@@ -163,38 +165,57 @@ undo_failed_apply() {
     exit "$code"
 }
 
-# Function to describe the Latency Ninja state of an interface (rules, persistence, timed rollback)
-interface_ninja_status() {
-    local interface="$1" ip_cmd="$2"
-    local status="" directions="" expires left
+# Function to read the Latency Ninja state of an interface into ninja_rules (ingress, egress, both or empty),
+# ninja_persisted (0 or 1), ninja_left (seconds until a timed rollback, or empty) and ninja_unconfirmed (0 or 1)
+interface_ninja_fields() {
+    local interface="$1" ip_cmd="$2" expires left
 
-    $ip_cmd link show "$(ifb_name_for "lni-" "$interface")" &>/dev/null && directions="ingress"
+    ninja_rules="" ninja_persisted=0 ninja_left="" ninja_unconfirmed=0
+    $ip_cmd link show "$(ifb_name_for "lni-" "$interface")" &>/dev/null && ninja_rules="ingress"
     if $ip_cmd link show "$(ifb_name_for "lne-" "$interface")" &>/dev/null; then
-        [ -n "$directions" ] && directions="both" || directions="egress"
+        [ -n "$ninja_rules" ] && ninja_rules="both" || ninja_rules="egress"
     fi
-    [ -n "$directions" ] && status="rules ($directions)"
-    is_persisted "$interface" && status="${status:+$status, }persisted"
+    is_persisted "$interface" && ninja_persisted=1
     expires="$state_dir/$interface.expires"
     if [ -r "$expires" ]; then
         left=$(( $(cat "$expires") - $(date +%s) ))
-        [ "$left" -gt 0 ] && status="${status:+$status, }rollback in $((left / 60))m $((left % 60))s"
+        if [ "$left" -gt 0 ]; then
+            ninja_left="$left"
+            [ -f "$state_dir/$interface.confirm" ] && ninja_unconfirmed=1
+        fi
+    fi
+}
+
+# Function to describe the Latency Ninja state of an interface (rules, persistence, timed rollback)
+interface_ninja_status() {
+    local interface="$1" ip_cmd="$2"
+    local status=""
+
+    interface_ninja_fields "$interface" "$ip_cmd"
+    [ -n "$ninja_rules" ] && status="rules ($ninja_rules)"
+    [ "$ninja_persisted" -eq 1 ] && status="${status:+$status, }persisted"
+    if [ -n "$ninja_left" ]; then
+        status="${status:+$status, }rollback in $((ninja_left / 60))m $((ninja_left % 60))s"
+        [ "$ninja_unconfirmed" -eq 1 ] && status="$status (unconfirmed)"
     fi
     echo "${status:--}"
 }
 
-# Function to display the network interfaces that rules can be applied to.
+# Function to display the network interfaces that rules can be applied to (--format json prints them as JSON).
 # Based on a contribution by Stan Cope (@scopey).
 show_available_interfaces() {
     local ip_cmd="${ip_path:-$(command -v ip)}"
     local jq_cmd="${jq_path:-$(command -v jq)}"
-    local name state kind slave master link_type address type
+    local name state kind slave master link_type address type rows=()
 
     [ -n "$ip_cmd" ] || die "The 'ip' command is required but it's not installed."
     [ -n "$jq_cmd" ] || die "The 'jq' command is required but it's not installed."
 
-    echo
-    in_namespace && echo -e "Namespace: $LATENCYNINJA_NETNS_DESC\n"
-    printf "%-16s %-8s %-30s %-20s %s\n" "INTERFACE" "STATE" "TYPE" "IPV4" "LATENCY NINJA"
+    if [ "$output_format" = "text" ]; then
+        echo
+        in_namespace && echo -e "Namespace: $LATENCYNINJA_NETNS_DESC\n"
+        printf "%-16s %-8s %-30s %-20s %s\n" "INTERFACE" "STATE" "TYPE" "IPV4" "LATENCY NINJA"
+    fi
     # ifb devices are used internally by Latency Ninja (lni-*/lne-*) and the ifb module, so they're hidden
     # "|" rather than tabs: read collapses consecutive whitespace delimiters, which would shift empty fields
     while IFS='|' read -r name state kind slave master link_type; do
@@ -205,7 +226,23 @@ show_available_interfaces() {
         esac
         [ -n "$master" ] && type="$type ($slave member of $master)"
         address=$($ip_cmd -j -4 address show dev "$name" 2>/dev/null | $jq_cmd -r '[.[].addr_info[] | "\(.local)/\(.prefixlen)"] | first // "-"')
-        printf "%-16s %-8s %-30s %-20s %s\n" "$name" "$state" "$type" "${address:--}" "$(interface_ninja_status "$name" "$ip_cmd")"
+        if [ "$output_format" = "json" ]; then
+            interface_ninja_fields "$name" "$ip_cmd"
+            rows+=("$($jq_cmd -nc --arg name "$name" --arg state "$state" --arg type "$type" --arg kind "$kind" --arg master "$master" \
+                --arg address "${address:--}" --arg rules "$ninja_rules" --argjson persisted "$ninja_persisted" \
+                --arg left "$ninja_left" --argjson unconfirmed "$ninja_unconfirmed" \
+                '{name: $name, state: $state, type: $type, kind: (if $kind == "" then null else $kind end),
+                  master: (if $master == "" then null else $master end), ipv4: (if $address == "-" then null else $address end),
+                  latencyninja: {rules: (if $rules == "" then "none" else $rules end), persisted: ($persisted == 1),
+                  rollback_seconds_left: (if $left == "" then null else ($left | tonumber) end),
+                  awaiting_confirmation: ($unconfirmed == 1)}}')")
+        else
+            printf "%-16s %-8s %-30s %-20s %s\n" "$name" "$state" "$type" "${address:--}" "$(interface_ninja_status "$name" "$ip_cmd")"
+        fi
     done < <($ip_cmd -j -d link show | $jq_cmd -r '.[] | [.ifname, .operstate, (.linkinfo.info_kind // ""), (.linkinfo.info_slave_kind // ""), (.master // ""), .link_type] | join("|")')
-    echo
+    if [ "$output_format" = "json" ]; then
+        printf '%s\n' "${rows[@]}" | $jq_cmd -s --arg ns "${LATENCYNINJA_NETNS_DESC:-}" '{namespace: (if $ns == "" then null else $ns end), interfaces: .}'
+    else
+        echo
+    fi
 }

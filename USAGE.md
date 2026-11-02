@@ -16,8 +16,11 @@ Detailed examples of every Latency Ninja feature. For installation and an overvi
 - [Checking what is applied](#checking-what-is-applied)
 - [Rolling back](#rolling-back)
 - [Timed rollback](#timed-rollback)
+- [Dead-man switch](#dead-man-switch)
 - [SSH lockout guard](#ssh-lockout-guard)
 - [Dry run](#dry-run)
+- [Probing the effect of the rules](#probing-the-effect-of-the-rules)
+- [Running detached](#running-detached)
 - [Check and clean](#check-and-clean)
 - [Snapshots and backups](#snapshots-and-backups)
 - [Persistence across reboots and interface restarts](#persistence-across-reboots-and-interface-restarts)
@@ -25,7 +28,7 @@ Detailed examples of every Latency Ninja feature. For installation and an overvi
 - [Bonded interfaces](#bonded-interfaces)
 - [WireGuard interfaces](#wireguard-interfaces)
 - [Containers and network namespaces](#containers-and-network-namespaces)
-- [Logs, backups and debugging](#logs-backups-and-debugging)
+- [Logs, backups, audit log and debugging](#logs-backups-audit-log-and-debugging)
 - [Updating](#updating)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -63,7 +66,7 @@ Applying new rules to an interface replaces the rules already on it. Each run pr
     To rollback, run: sudo ./latencyninja --rollback --interface eth0
 
     Backup saved to: /tmp/latencyninja_tc_backup_20261023_165052_375560 (restore with: sudo ./latencyninja --restore /tmp/latencyninja_tc_backup_20261023_165052_375560)
-    Log updated at: /tmp/latencyninja.log
+    Log updated at: /var/log/latencyninja/latencyninja.log
 
 ## Finding the right interface
 
@@ -227,7 +230,7 @@ Every option that applies rules can come from a JSON file, including the target 
         "latency": 150,
         "packet_loss": "0.5",
         "persist": true,
-        "logging": "/var/log/latencyninja.log"
+        "logging": "/var/log/mylog/latencyninja.log"
     }
 
     sudo ./latencyninja --json experiment.json
@@ -242,6 +245,8 @@ Every option that applies rules can come from a JSON file, including the target 
 | `rate` | string with unit, e.g. `"2mbit"` | `--rate` |
 | `profile` | profile name | `--profile` |
 | `duration` | string, e.g. `"15m"`, or number of seconds | `--duration` |
+| `confirm_within` | string, e.g. `"2m"`, or number of seconds | `--confirm-within` |
+| `probe`, `probe_count` | target (`http://`, `https://` or `tcp://host:port`), number | `--probe`, `--probe-count` |
 | `persist` | `true` or `false` | `--persist` |
 | `allow_ssh` | `true` or `false` | `--allow-ssh` |
 | `backup`, `logging` | path | `--backup`, `--logging` |
@@ -273,6 +278,24 @@ Rules:
 
 `--show-interfaces` gives a shorter per-interface summary.
 
+### JSON output and counters
+
+`--query`, `--show-interfaces`, `--stats` and `--status` print JSON with `--format json`, for scripts and dashboards (the text output is unchanged without it). The option can come before or after the command:
+
+    sudo ./latencyninja --query --format json | jq '.scheduled_rollbacks'
+    sudo ./latencyninja --show-interfaces --format json | jq -r '.interfaces[] | select(.latencyninja.rules != "none") | .name'
+
+`--query` gives `devices` (each with its `filters` and the parsed `netem` values), `persisted_interfaces` and `scheduled_rollbacks` (with `seconds_left` and `awaiting_confirmation`). `--show-interfaces` gives `interfaces` with their `type`, `ipv4` and a `latencyninja` object (`rules`: `ingress`, `egress`, `both` or `none`, `persisted`, `rollback_seconds_left`, `awaiting_confirmation`). Inside `--container`, `--netns` or `--pid` the `namespace` is set.
+
+`--stats` shows the traffic counters of the netem qdiscs of every interface with rules, or only `--interface`. They count the traffic the rules match, in each direction:
+
+    $ sudo ./latencyninja --stats
+    INTERFACE    DIRECTION QDISC           PACKETS          BYTES    DROPPED  OVERLIMITS  REQUEUES
+    eth0         ingress  netem               1204         143822         36           0         0
+    eth0         egress   netem               1198         121664         29           0         0
+
+Dropped packets are the ones netem discarded: packet loss, or a queue that was full. The counters start when the rules are applied and are reset by applying again.
+
 ## Rolling back
 
 Remove all Latency Ninja rules from an interface (and its persisted rules and pending timed rollback):
@@ -300,12 +323,30 @@ Timed rollback uses a systemd timer, so it requires systemd and can't be combine
 
 On remote machines, `--duration` is a good safety net: if a rule cuts off your SSH session, it is removed automatically.
 
+## Dead-man switch
+
+`--confirm-within` is for changes that might cut off your own access, such as rules on the interface you are connected through. The rules are applied and a rollback is scheduled; unless you confirm them in time, they are removed by themselves:
+
+    sudo ./latencyninja -i eth0 -d 10.0.0.0/24 --packet_loss 50 --confirm-within 2m
+
+    Rollback of eth0 scheduled at 2026-11-02 10:37:45 (latencyninja-rollback-eth0.timer) unless you confirm.
+    To keep the rules, run: sudo ./latencyninja --confirm --interface eth0
+    To roll back now, run: sudo ./latencyninja --rollback --interface eth0
+
+If the connection still works, keep the rules:
+
+    sudo ./latencyninja --confirm --interface eth0
+
+If it doesn't, do nothing: after 2 minutes the interface goes back to how it was just before, as with `--duration`. `--query` and `--show-interfaces` show `(unconfirmed)` and the time left. Confirming twice, or after the rollback happened, is an error.
+
+It is the same timer as `--duration`, so it also needs systemd, can't be combined with `--persist` and can't be combined with `--duration`; the SSH lockout guard accepts it like `--duration`. `--confirm` only works for rules applied with `--confirm-within`. It works with `--container`, `--netns` and `--pid`, and in a JSON file (`"confirm_within": "2m"`).
+
 ## SSH lockout guard
 
 Rules that match the traffic of your own SSH session can make it unusable, and with it the way to remove the rules. Before applying rules, Latency Ninja looks for established SSH sessions (sshd and dropbear connections, plus the session the command runs in) that reach the machine through the target interface. If the rules would affect one, nothing is applied:
 
     $ sudo ./latencyninja -i eth0 -d 10.0.0.0/24 --packet_loss 50
-    Error: These rules would also affect your SSH session from 10.0.0.9 on eth0 and could lock you out. Exclude that address from --src_ip/--dst_ip, add --duration <time> so the rules roll back automatically, or add --allow-ssh to apply them anyway.
+    Error: These rules would also affect your SSH session from 10.0.0.9 on eth0 and could lock you out. Exclude that address from --src_ip/--dst_ip, add --duration <time> (or --confirm-within <time>) so the rules roll back automatically, or add --allow-ssh to apply them anyway.
 
 Your options:
 
@@ -313,6 +354,8 @@ Your options:
 - Add `--duration`. The rules are then applied with a warning and removed on their own, even if the session is lost:
 
       sudo ./latencyninja -i eth0 -d 10.0.0.0/24 --packet_loss 50 --duration 5m
+
+- Or add `--confirm-within`, which removes them unless you confirm that the session still works (see [Dead-man switch](#dead-man-switch)).
 
 - Add `--allow-ssh` (or `"allow_ssh": true` in a JSON file) to apply the rules anyway.
 
@@ -332,10 +375,46 @@ The check is conservative. A session counts as affected when its client address 
       ...
       tc qdisc add dev lne-eth0 parent 1:1 handle 20:0 netem delay 20ms loss 1%
 
-    Dry run: nothing was changed, no backup was taken and no log entry was written.
+    Dry run: nothing was changed, no backup was taken and no log or audit entry was written.
     To apply, run: sudo ./latencyninja -i eth0 -d 10.0.0.5:80 -l 40 -x 1
 
-Nothing is changed: existing rules, backups, logs, persistence and timers are left alone. The commands begin with the ones that remove any existing Latency Ninja rules on the interface, as a real run does first. `--dry-run` only previews applying rules, so it can't be combined with `--rollback`, `--check`, `--clean`, `--save`, `--restore` or `--apply-persisted`. It still needs root, because the checks read the interface and its addresses.
+Nothing is changed: existing rules, backups, logs, the audit log, persistence and timers are left alone. The commands begin with the ones that remove any existing Latency Ninja rules on the interface, as a real run does first. `--dry-run` only previews applying rules, so it can't be combined with `--rollback`, `--confirm`, `--check`, `--clean`, `--save`, `--restore`, `--apply-persisted` or `--run-in`. It still needs root, because the checks read the interface and its addresses.
+
+## Probing the effect of the rules
+
+`--probe` measures what the rules do to a real application, not only to ICMP. It uses `curl` to measure the target before the rules are applied (after any earlier rules were removed, so it is a true baseline) and again once they are in place, and shows the difference:
+
+    $ sudo ./latencyninja -i eth0 -d 10.0.5.20:443 -l 40 --probe https://10.0.5.20/health --probe-count 5
+    ...
+                      connect (avg) first byte (avg)  total (avg)   failed
+      before rules           0.4 ms           3.1 ms       3.8 ms        0
+      with rules            41.2 ms         127.9 ms     128.4 ms        0
+      difference           +40.8 ms        +124.8 ms    +124.6 ms
+
+The target is one of:
+
+- `http://host[:port][/path]` or `https://...`: a full request, with the connect time, the time to the first byte and the total time.
+- `tcp://host:port`: only the TCP connection, which is what you want for a database, an MQ queue manager or a mainframe gateway that doesn't speak HTTP.
+
+`--probe-count` sets the number of requests per measurement (default 5, at most 100). The probe runs where the rules apply: with `--container`, `--netns` or `--pid` it runs inside that namespace. A probe that fails is a warning, not an error: the rules are still applied. With a rollback timer (`--duration`, `--confirm-within`) the timer is started before the second measurement. The results are also written to the audit log. `--dry-run` only says that the probe would run. `curl` is only needed when `--probe` is used. `probe` and `probe_count` can be set in a JSON file.
+
+## Running detached
+
+`--run-in` runs the command detached, so a dropped terminal or SSH session doesn't end it, for example while a probe is measuring or when applying rules over a link that may drop:
+
+    sudo ./latencyninja -i eth0 -d 10.0.5.20 -l 40 --probe tcp://10.0.5.20:1414 --run-in tmux
+
+- `--run-in background` (or `--background`) starts a detached process. Nothing else is needed.
+- `--run-in screen` starts a detached [screen](https://www.gnu.org/software/screen/) session, and `--run-in tmux` a detached [tmux](https://github.com/tmux/tmux) session, so you can attach and watch it (`screen -r latencyninja-<id>`, `tmux attach -t latencyninja-<id>`). `screen` or `tmux` is only required when selected, and is installed with the other packages if you accept.
+
+The command is checked first, in the foreground, so a mistake is reported right away instead of inside a session nobody is watching. It then runs again in the detached process, which keeps its output in `/run/latencyninja/runs/<id>.log`. Runs are kept until the next reboot.
+
+    sudo ./latencyninja --status                  # list the runs
+    sudo ./latencyninja --status <id>             # one run, with the end of its output
+    sudo ./latencyninja --wait <id>               # wait for it, show the output, exit with its exit code
+    sudo ./latencyninja --status --format json    # for scripts
+
+`--wait` returns the exit code of the run, so a script can start a run and wait for it. It works with `--container`, `--netns`, `--pid` and a namespace set in a JSON file (the run enters the same namespace), and with `--confirm-within`: confirm the rules from any terminal with `--confirm`. It can't be combined with `--dry-run`.
 
 ## Check and clean
 
@@ -490,13 +569,21 @@ Notes:
 - `--persist` works with `--container` and `--netns`; see [Persistence in containers and namespaces](#persistence-in-containers-and-namespaces).
 - To find what to target, `--show-interfaces` inside the container shows its interfaces and addresses. The container's gateway (e.g. `10.88.0.1` for Podman, `172.17.0.1` for Docker) is the destination for traffic between the container and the host or the outside world.
 
-## Logs, backups and debugging
+## Logs, backups, audit log and debugging
 
-Choose where backups and the execution log are written (defaults: `/tmp` and `/tmp/latencyninja.log`):
+Choose where backups and the execution log are written (defaults: `/tmp` and `/var/log/latencyninja/latencyninja.log`, which is created readable by root and its group only):
 
-    sudo ./latencyninja -i eth0 -d 192.168.100.123 -l 50 --backup /var/backups/latencyninja --logging /var/log/latencyninja.log
+    sudo ./latencyninja -i eth0 -d 192.168.100.123 -l 50 --backup /var/backups/latencyninja --logging /var/log/mylog/latencyninja.log
 
-The log records every applied configuration with its parameters, the resulting netem settings and, if used, the profile, duration and namespace.
+The log records every applied configuration with its parameters, the resulting netem settings and, if used, the profile, duration and namespace. It is meant to be read by people.
+
+The audit log is for recording who changed what, and when. Every change Latency Ninja makes adds one JSON line to `/var/log/latencyninja/audit.log` (or the file given with `--audit-log`): rules applied, rolled back, restored or confirmed, rollbacks by a timer, rules applied at boot, `--clean`, and probe results. Each entry has the time (UTC), the event, the user (the one behind `sudo`), the client address when it came through SSH, the host, the namespace, the command line and the values applied:
+
+    $ jq -r '[.ts, .actor, .source, .event, .interface, .latency] | @tsv' /var/log/latencyninja/audit.log
+    2026-11-02T06:35:45Z    alice   10.0.0.9    apply       eth0    40
+    2026-11-02T06:37:45Z    systemd timer       timed_rollback  eth0
+
+Empty values are left out. A bad `--audit-log` path is reported before anything is applied. If the audit log can't be written while rolling back or restoring, a warning is shown and the rollback goes on: removing rules is never blocked. Dry runs and `--save` don't write to it. Rotate it like any log, for example with `logrotate`.
 
 Print detailed error information and variables when something fails:
 

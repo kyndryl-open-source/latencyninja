@@ -26,6 +26,11 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 🗂️ Profiles: Ready-made network profiles (3G, 4G, 5G, satellite, cross-region links, lossy Wi-Fi) and your own.
 * ⏲️ Timed rollback: Automatically restore the previous rules after a duration.
 * 🛡️ SSH lockout guard: Refuses rules that would affect your own SSH session, unless they roll back automatically.
+* ⏱️ Dead-man switch: `--confirm-within` rolls the rules back unless you confirm them with `--confirm`, so a change that cuts you off undoes itself.
+* 📏 Probes: `--probe` measures what the rules do to a real application (HTTP or TCP, with `curl`), before and after.
+* 📈 Stats and JSON: `--stats` shows the traffic counters, and `--query`, `--show-interfaces`, `--stats` and `--status` print JSON with `--format json`.
+* 🧾 Audit log: every change is recorded, with who made it and from where, one JSON line each.
+* 🖥️ Detached runs: `--run-in background|screen|tmux` keeps a run going if your terminal or SSH session drops.
 * 👀 Dry run: `--dry-run` shows the exact `tc`/`ip` commands that would be run, without changing anything.
 * 🧹 Check and clean: `--check` finds leftovers and invalid settings, `--clean` removes them. Inputs are validated and normalized before anything is applied.
 * 📦 Containers: Target a single Docker or Podman container, a network namespace or a process instead of the whole host.
@@ -47,10 +52,10 @@ This program is distributed under the GNU General Public License (GPL), it is di
 ## Prerequisites
 
 1. Latency Ninja requires the following packages installed on the system, however it will also attempt to dnf install/apt install missing packages:
-      - CentOS/Fedora/Red Hat: kmod, iproute, kernel-modules-extra, iproute-tc, curl, jq
-      - Debian/Ubuntu: kmod, iproute2, curl, jq
-      - git is also required to use `--update`.
-      - `--persist` and `--duration` require systemd.
+      - CentOS/Fedora/Red Hat: kmod, iproute, kernel-modules-extra, iproute-tc, jq
+      - Debian/Ubuntu: kmod, iproute2, jq
+      - Only when the feature is used: `curl` for `--probe` and `--update`, `git` for `--update`, `screen` or `tmux` for `--run-in screen` or `--run-in tmux` (they are installed with the other packages if you accept).
+      - `--persist`, `--duration` and `--confirm-within` require systemd.
 2. `root` or `sudo` privileges are required.
 
 ## Compatibility
@@ -81,7 +86,8 @@ See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
                           [--src_ip <source IP/network>]
                           [--direction <direction>]
                           [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]
-                          [--profile <name>] [--duration <time>] [--persist]
+                          [--profile <name>] [--duration <time> | --confirm-within <time>] [--persist]
+                          [--probe <target>] [--run-in <background|screen|tmux>]
 
       Options:
 
@@ -91,6 +97,8 @@ See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
 
       -q, --query                                     Display current tc rules applied.
       --show-interfaces                               List network interfaces with their type, IPv4 address and Latency Ninja status.
+      --stats                                         Show the traffic counters (packets, bytes, drops) of the rules applied (all interfaces, or only --interface).
+      --format <text|json>                            Output format of --query, --show-interfaces, --stats and --status. (default: text).
       -r, --rollback                                  Rollback any networking conditions changes and redirections. Requires --interface.
 
       --container <name|id>                           Apply/query/roll back inside a running Docker or Podman container.
@@ -120,17 +128,27 @@ See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
       -p, --profile <name>                            Apply a network profile (e.g., 3g, 4g, satellite). Explicit options override its values.
       --profiles                                      List the available profiles.
       -t, --duration <time>                           Automatically roll back after a duration (e.g., 30s, 10m, 2h), restoring the previous rules.
+      --confirm-within <time>                         Dead-man switch: roll back automatically (e.g., after 2m) unless the rules are confirmed with --confirm. Requires systemd.
+      --confirm                                       Keep the rules applied with --confirm-within. Requires --interface.
+      --probe <target>                                Measure the effect of the rules with curl, before and after applying them. Target: http://host[:port][/path], https://... or tcp://host:port.
+      --probe-count <n>                               Number of requests per measurement (default: 5).
+
+      --run-in <background|screen|tmux>               Run detached, so a dropped terminal or SSH session doesn't end the run.
+      --background                                    Same as --run-in background.
+      --status [id]                                   List the detached runs, or show one with the end of its output.
+      --wait <id>                                     Wait for a detached run to end, show its output and exit with its exit code.
 
       --json <path/file.json>                         Path to JSON file.
       --backup <path>                                 Directory for tc rules backup files (default: /tmp/).
-      --logging <path>                                Path for execution log file (default: /tmp/latencyninja.log).
+      --logging <path>                                Path for execution log file (default: /var/log/latencyninja/latencyninja.log).
+      --audit-log <path>                              Path for the audit log, one JSON line per change with who made it (default: /var/log/latencyninja/audit.log).
       --persist                                       Re-apply the rules at boot and whenever the interface is re-created (requires systemd).
                                                       Persisted rules are removed with --rollback.
       --save <file>                                   Save a restorable snapshot of the current rules (all interfaces, or only --interface).
       --restore <file>                                Restore the rules from a snapshot or backup file (all interfaces in it, or only --interface).
       --check                                         Check for leftovers (orphaned ifb devices, stale state, broken persisted rules, old backups) and invalid profiles. Exits 1 if any are found.
       --clean                                         Check, then remove the leftovers after confirmation (--yes skips the confirmation). Active rules are never touched.
-      --allow-ssh                                     Apply rules even if they affect your SSH session (refused by default unless --duration is used).
+      --allow-ssh                                     Apply rules even if they affect your SSH session (refused by default unless --duration or --confirm-within is used).
       --update                                        Checks and updates to the latest version from Github.
 
 ## Examples
@@ -341,8 +359,7 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- **1.29** Safety and automation: JSON output for `--query` and `--show-interfaces`, default log outside `/tmp`, `--stats`. `curl` required only with `--update` (#47). Probing with `curl` (HTTP/TCP) to measure application response time, not only ICMP (#24).
-- **1.30** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic. Exclusions for management traffic such as DHCP and ARP, next to the SSH lockout guard (#7).
+- **1.30** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic. WAN realism: `--mtu` and tunnel overhead emulation (IPsec, GRE, VXLAN) to reproduce fragmentation and MSS problems, and link profiles for Direct Connect, ExpressRoute and MPLS. Exclusions for management traffic such as DHCP and ARP, next to the SSH lockout guard (#7).
 - **1.31** More realistic conditions: per-direction values (e.g. `--egress-rate`, and different ingress and egress values in one rule set, #48), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
 - **1.32** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
 - **1.33** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.

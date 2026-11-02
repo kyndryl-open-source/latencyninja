@@ -19,6 +19,10 @@ check_log_file() {
     local log_dir
     log_dir=$(dirname "$log_file")
 
+    # The default directory is created when the first entry is written: it only has to be creatable
+    if [ ! -d "$log_dir" ] && [ "$log_dir" = "$default_log_dir" ] && [ -w "$(dirname "$log_dir")" ]; then
+        return 0
+    fi
     if [ ! -d "$log_dir" ]; then
         die "Log directory does not exist: $log_dir"
     fi
@@ -30,6 +34,13 @@ check_log_file() {
     fi
 }
 
+# Function to create the default log directory (/var/log/latencyninja) when the default log file is used
+prepare_default_log_dir() {
+    local file="$1"
+    [ "$(dirname "$file")" = "$default_log_dir" ] || return 0
+    [ -d "$default_log_dir" ] || { mkdir -p "$default_log_dir" && chmod 750 "$default_log_dir"; } || die "Could not create the log directory: $default_log_dir"
+}
+
 # Function to log execution details to the log file
 log_execution() {
     local log_file="$1"
@@ -38,6 +49,8 @@ log_execution() {
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
     check_log_file "$log_file"
+    # The log records the commands that were run: only root and the log group read it
+    [ -f "$log_file" ] || { touch "$log_file" && chmod 640 "$log_file"; }
 
     {
         echo "[$timestamp] Execution Start"
@@ -64,7 +77,7 @@ log_execution() {
         params="${params%, }"
         [ -n "$params" ] && echo "  Parameters: $params"
         [ -n "$profile" ] && echo "  Profile: $profile"
-        [ -n "$duration" ] && echo "  Duration: $duration (rollback at $(date -d "+${duration_seconds} seconds" '+%Y-%m-%d %H:%M:%S'))"
+        [ -n "$duration" ] && echo "  $([ "$confirm_pending" -eq 1 ] && echo "Confirm within" || echo "Duration"): $duration (rollback at $(date -d "+${duration_seconds} seconds" '+%Y-%m-%d %H:%M:%S')$([ "$confirm_pending" -eq 1 ] && echo " unless confirmed"))"
 
         echo "  Affected Rules:"
         if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then

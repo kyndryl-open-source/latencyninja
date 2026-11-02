@@ -55,9 +55,14 @@ dry_run_plan() {
     fi
 
     echo
-    [ -n "$duration" ] && echo "The rules would be rolled back automatically after $duration."
+    if [ "$confirm_pending" -eq 1 ]; then
+        echo "The rules would be rolled back automatically after $duration unless confirmed with --confirm."
+    elif [ -n "$duration" ]; then
+        echo "The rules would be rolled back automatically after $duration."
+    fi
+    [ -n "$probe" ] && echo "$probe would be probed $probe_count times before and after applying the rules."
     [ "$persist" -eq 1 ] && echo "The rules would be persisted and re-applied at boot."
-    echo "Dry run: nothing was changed, no backup was taken and no log entry was written."
+    echo "Dry run: nothing was changed, no backup was taken and no log or audit entry was written."
     echo "To apply, run: sudo $0 ${apply_args[*]}"
     echo
 }
