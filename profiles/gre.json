@@ -1,0 +1,1 @@
+{ "description": "GRE tunnel over a 1500 byte path: 24 bytes of overhead", "mtu": "1476" }

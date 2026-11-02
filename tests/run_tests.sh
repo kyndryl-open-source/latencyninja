@@ -1948,6 +1948,255 @@ test_run_in_namespace() {
     ln --netns lnpeer --interface lnpeer0 --rollback
 }
 
+
+# ---------- tests: 1.30 (--protocol, --mtu, warnings, profiles) ----------
+
+# Which IP packet sizes arrive: udp_sizes HOST_SENDING|PEER_SENDING SIZE...
+# Sends from the host to the peer namespace, or from the peer to the host
+udp_sizes() {
+    local from="$1"
+    shift
+    local result="$work_dir/udp_sizes.out"
+    mkdir -p "$work_dir"
+    if [ "$from" = "host" ]; then
+        nsenter --net=/run/netns/lnpeer python3 "$tests_dir/helpers/udp_mtu.py" recv 10.10.0.2 9999 1.5 > "$result" &
+        sleep 0.3
+        python3 "$tests_dir/helpers/udp_mtu.py" send 10.10.0.2 9999 "$@"
+    else
+        python3 "$tests_dir/helpers/udp_mtu.py" recv 10.10.0.1 9999 1.5 > "$result" &
+        sleep 0.3
+        nsenter --net=/run/netns/lnpeer python3 "$tests_dir/helpers/udp_mtu.py" send 10.10.0.1 9999 "$@"
+    fi
+    wait
+    cat "$result"
+}
+
+test_protocol() {
+    # TCP only: connections are delayed, ping is not
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol tcp
+    check "apply exit code 0" [ "$rc" -eq 0 ]
+    check "output shows the protocol" contains "$out" "Protocol: tcp"
+    ping_stats 10.10.0.2 5 0.2; check "ping unaffected by a tcp rule (got $avg)" between "$avg" 0 10
+    check "TCP delayed by a tcp rule (got $(tcp_rtt 10.10.0.2 80 3))" between "$(tcp_rtt 10.10.0.2 80 3)" 40 130
+    check "the filter matches the protocol" contains "$(tc filter show dev lne-$dev)" "00060000/00ff0000 at 8"
+
+    # ICMP only
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol icmp
+    ping_stats 10.10.0.2 5 0.2; check "ping delayed by an icmp rule (got $avg)" between "$avg" 90 130
+    check "TCP unaffected by an icmp rule (got $(tcp_rtt 10.10.0.2 80 3))" between "$(tcp_rtt 10.10.0.2 80 3)" 0 15
+
+    # UDP only: neither ping nor TCP
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol udp
+    ping_stats 10.10.0.2 5 0.2; check "ping unaffected by a udp rule (got $avg)" between "$avg" 0 10
+    check "TCP unaffected by a udp rule (got $(tcp_rtt 10.10.0.2 80 3))" between "$(tcp_rtt 10.10.0.2 80 3)" 0 15
+
+    # With a port, and case insensitive
+    ln --interface "$dev" --dst_ip 10.10.0.2:8080 --latency 100 --protocol TCP
+    check "case insensitive (exit $rc)" [ "$rc" -eq 0 ]
+    check "TCP on the port delayed (got $(tcp_rtt 10.10.0.2 8080 3))" between "$(tcp_rtt 10.10.0.2 8080 3)" 40 130
+    check "TCP on another port unaffected (got $(tcp_rtt 10.10.0.2 9090 3))" between "$(tcp_rtt 10.10.0.2 9090 3)" 0 15
+
+    # Ingress only
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol tcp --direction ingress
+    check "TCP delayed on ingress (got $(tcp_rtt 10.10.0.2 80 3))" between "$(tcp_rtt 10.10.0.2 80 3)" 40 130
+
+    # Validation
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol sctp
+    check "unknown protocol refused" contains "$out" "Invalid protocol: sctp. Valid options are: tcp, udp or icmp."
+    ln --interface "$dev" --dst_ip 10.10.0.2:80 --latency 100 --protocol icmp
+    check "icmp with a port refused" contains "$out" "The icmp protocol has no ports"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol
+    check "needs a value" contains "$out" "The --protocol option requires an argument."
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2:80 --latency 100 --protocol udp
+    check "dry run shows the protocol match" contains "$out" "match ip protocol 17 0xff"
+    check "and the port match" contains "$out" "match ip dport 80 0xffff"
+
+    # Saved and restored, JSON
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 100 --protocol tcp
+    ln --save "$work_dir/proto.snap" --interface "$dev"
+    check "the snapshot has the protocol" contains "$(cat "$work_dir/proto.snap")" "--protocol"
+    ln --interface "$dev" --rollback
+    ln --restore "$work_dir/proto.snap" --interface "$dev"
+    check "restored (exit $rc)" [ "$rc" -eq 0 ]
+    check "the restored filter matches the protocol" contains "$(tc filter show dev lne-$dev)" "00060000/00ff0000 at 8"
+    ln --interface "$dev" --rollback
+    printf '{"interface":"%s","dst_ip":"10.10.0.2","latency":100,"protocol":"tcp"}' "$dev" > "$work_dir/proto.json"
+    ln --json "$work_dir/proto.json"
+    check "protocol in a JSON file" contains "$out" "Protocol: tcp"
+}
+
+test_mtu() {
+    # Egress: the host sends to the peer
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 1400 --direction egress
+    check "apply exit code 0 (an MTU alone is enough)" [ "$rc" -eq 0 ]
+    check "output shows the MTU" contains "$out" "MTU: 1400 bytes"
+    local sizes; sizes=$(udp_sizes host 600 1400 1401 1500)
+    check "egress: packets up to the MTU arrive, larger ones don't (got: $sizes)" [ "$sizes" = "600 1400" ]
+    ln --interface "$dev" --rollback
+    sizes=$(udp_sizes host 600 1400 1401 1500)
+    check "after rollback everything arrives (got: $sizes)" [ "$sizes" = "600 1400 1401 1500" ]
+
+    # Ingress: the peer sends to the host
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 1200 --direction ingress
+    sizes=$(udp_sizes peer 600 1200 1201 1500)
+    check "ingress: packets up to the MTU arrive, larger ones don't (got: $sizes)" [ "$sizes" = "600 1200" ]
+    sizes=$(udp_sizes host 600 1500)
+    check "ingress rule doesn't touch egress (got: $sizes)" [ "$sizes" = "600 1500" ]
+
+    # Both directions, with the other conditions and a protocol
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 1000 --latency 50 --protocol udp
+    sizes=$(udp_sizes host 600 1000 1001)
+    check "both: egress (got: $sizes)" [ "$sizes" = "600 1000" ]
+    sizes=$(udp_sizes peer 600 1000 1001)
+    check "both: ingress (got: $sizes)" [ "$sizes" = "600 1000" ]
+    ping_stats 10.10.0.2 5 0.2; check "the latency still applies to the rest (got $avg)" between "$avg" 0 10
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 1000 --protocol tcp
+    sizes=$(udp_sizes host 600 1500)
+    check "a tcp rule doesn't drop udp (got: $sizes)" [ "$sizes" = "600 1500" ]
+    check "TCP still works with small packets (got $(tcp_rtt 10.10.0.2 80 2))" between "$(tcp_rtt 10.10.0.2 80 2)" 0 15
+    ln --interface "$dev" --rollback
+
+    # Validation
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 67
+    check "too small refused" contains "$out" "Invalid mtu: 67"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 70000
+    check "too large refused" contains "$out" "Invalid mtu: 70000"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu abc
+    check "not a number refused" contains "$out" "Invalid mtu: abc"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu
+    check "needs a value" contains "$out" "The --mtu option requires an argument."
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --mtu 1400 --direction egress
+    check "dry run shows the police action (the Ethernet header counts)" contains "$out" "action police rate 100gbit burst 1m mtu 1414 conform-exceed drop/ok"
+    check "nothing applied after refusals" not_contains "$(tc qdisc show dev $dev)" "prio"
+
+    # JSON, snapshot, log and audit log
+    printf '{"interface":"%s","dst_ip":"10.10.0.2","mtu":1300}' "$dev" > "$work_dir/mtu.json"
+    ln --json "$work_dir/mtu.json" --logging "$work_dir/mtu.log" --audit-log "$work_dir/mtu-audit.log"
+    check "mtu in a JSON file (exit $rc)" [ "$rc" -eq 0 ]
+    check "the filter drops above the MTU" contains "$(tc filter show dev lne-$dev)" "mtu 1314b"
+    check "the log records it" contains "$(cat "$work_dir/mtu.log")" "MTU: 1300"
+    check "the audit log records it" [ "$(tail -1 "$work_dir/mtu-audit.log" | jq -r .mtu)" = "1300" ]
+    ln --save "$work_dir/mtu.snap" --interface "$dev"
+    ln --interface "$dev" --rollback
+    ln --restore "$work_dir/mtu.snap" --interface "$dev"
+    check "restored with the MTU" contains "$(tc filter show dev lne-$dev)" "mtu 1314b"
+    ln --interface "$dev" --rollback
+}
+
+test_new_profiles() {
+    ln --profiles
+    local name
+    for name in ipsec gre vxlan directconnect expressroute mpls; do
+        check "$name is listed" contains "$out" "  $name "
+    done
+    check "mtu is shown" contains "$out" "mtu 1450"
+
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile vxlan --direction egress
+    check "vxlan applies (exit $rc)" [ "$rc" -eq 0 ]
+    check "output shows the MTU of the profile" contains "$out" "MTU: 1450 bytes"
+    local sizes; sizes=$(udp_sizes host 1400 1450 1451)
+    check "packets above 1450 bytes are dropped (got: $sizes)" [ "$sizes" = "1400 1450" ]
+    ln --interface "$dev" --rollback
+
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile gre --mtu 1000 --direction egress
+    sizes=$(udp_sizes host 1000 1001)
+    check "an explicit --mtu overrides the profile (got: $sizes)" [ "$sizes" = "1000" ]
+    ln --interface "$dev" --rollback
+
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile ipsec
+    check "ipsec: 1400" contains "$out" "MTU: 1400 bytes"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile gre
+    check "gre: 1476" contains "$out" "MTU: 1476 bytes"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile mpls
+    check "mpls: mtu, latency and jitter" contains "$out" "MTU: 1496 bytes"
+    check "mpls latency" contains "$out" "Latency: 30 ms"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile directconnect
+    check "directconnect: latency" contains "$out" "Latency: 10 ms"
+    check "directconnect has no mtu" not_contains "$out" "MTU:"
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile expressroute
+    check "expressroute: latency" contains "$out" "Latency: 10 ms"
+    ln --interface "$dev" --rollback
+
+    mkdir -p /etc/latencyninja/profiles
+    echo '{ "description": "Bad", "mtu": "20" }' > /etc/latencyninja/profiles/lnbadmtu.json
+    ln --interface "$dev" --dst_ip 10.10.0.2 --profile lnbadmtu
+    check "a profile with a bad mtu is refused" contains "$out" "Invalid mtu: 20"
+    rm -f /etc/latencyninja/profiles/lnbadmtu.json
+}
+
+test_warnings() {
+    # IPv6: only link-local addresses, nothing to warn about
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 20
+    check "no warning without a global IPv6 address" not_contains "$out" "IPv6"
+    ln --interface "$dev" --rollback
+
+    ip -6 addr add fd00:1e::1/64 dev "$dev" nodad
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 20
+    check "applies anyway (exit $rc)" [ "$rc" -eq 0 ]
+    check "warns that IPv6 is not affected" contains "$out" "Warning: $dev has IPv6 addresses (fd00:1e::1/64). These rules only affect IPv4 traffic"
+    check "and that IPv6 is not supported yet" contains "$out" "IPv6 is not supported yet"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 20
+    check "dry run warns too" contains "$out" "IPv6 addresses"
+    ln --interface "$dev" --rollback
+    ln --netns lnpeer --interface lnpeer0 --dst_ip 10.10.0.1 --latency 20
+    check "a namespace without IPv6 addresses has no warning" not_contains "$out" "IPv6"
+    ln --netns lnpeer --interface lnpeer0 --rollback
+    ip -6 addr del fd00:1e::1/64 dev "$dev"
+
+    # Gateway: a default route through the interface
+    ip route add default via 10.10.0.2 dev "$dev" metric 9999
+    ln --interface "$dev" --dst_ip 10.10.0.0/24 --latency 20
+    check "applies anyway (exit $rc)" [ "$rc" -eq 0 ]
+    check "warns when a network covers the gateway" contains "$out" "Warning: these rules also cover the default gateway of $dev (10.10.0.2)"
+    check "and says how to limit it" contains "$out" "Use a more specific --dst_ip or add a port"
+    ln --interface "$dev" --rollback
+    ln --interface "$dev" --dst_ip 10.10.0.2 --latency 20
+    check "warns when the gateway itself is the target" contains "$out" "default gateway"
+    ln --interface "$dev" --rollback
+    ln --interface "$dev" --dst_ip 10.10.0.2:80 --latency 20
+    check "a port limits the rule: no warning" not_contains "$out" "default gateway"
+    ln --interface "$dev" --dst_ip 10.10.0.3 --latency 20
+    check "another host: no warning" not_contains "$out" "default gateway"
+    ln --interface "$dev" --dst_ip 10.10.0.0/25:80~443,10.20.0.0/24 --latency 20
+    check "ports on the network: no warning" not_contains "$out" "default gateway"
+    ln --interface "$dev" --rollback
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.0/24 --latency 20
+    check "dry run warns too" contains "$out" "default gateway"
+    ln --interface "$dev" --src_ip 10.10.0.0/24 --dst_ip 10.10.0.1 --latency 20
+    check "a source network covering the gateway warns" contains "$out" "default gateway"
+    ln --interface "$dev" --rollback
+    ip route del default via 10.10.0.2 dev "$dev" metric 9999
+    ln --interface "$dev" --dst_ip 10.10.0.0/24 --latency 20
+    check "no default route, no warning" not_contains "$out" "default gateway"
+    ln --interface "$dev" --rollback
+}
+
+
+# The kernel module is global: this test runs on its own, in the host (see real_systemd_tests)
+test_mtu_module() {
+    rmmod act_police 2>/dev/null
+    lsmod | grep -q '^act_police' && return 77   # built in, or in use
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --mtu 1400
+    check "dry run loads the module" contains "$out" "modprobe act_police"
+    ln --dry-run --interface "$dev" --dst_ip 10.10.0.2 --latency 20
+    check "without --mtu it isn't needed" not_contains "$out" "act_police"
+
+    mkdir -p "$work_dir/fakemod"
+    printf '#!/bin/sh\n[ "$1" = act_police ] && exit 1\nexec %s "$@"\n' "$(command -v modprobe)" > "$work_dir/fakemod/modprobe"
+    chmod +x "$work_dir/fakemod/modprobe"
+    out=$(cd "$repo_dir" && PATH="$work_dir/fakemod:$PATH" ./latencyninja --interface "$dev" --dst_ip 10.10.0.2 --mtu 1400 </dev/null 2>&1)
+    rc=$?
+    check "refused when the module can't be loaded (exit $rc)" [ "$rc" -ne 0 ]
+    check "says what to install" contains "$out" "needs the act_police kernel module"
+    check "nothing applied" not_contains "$(tc qdisc show dev $dev)" "prio"
+    out=$(cd "$repo_dir" && PATH="$work_dir/fakemod:$PATH" ./latencyninja --interface "$dev" --dst_ip 10.10.0.2 --latency 20 </dev/null 2>&1)
+    check "other rules don't need it (exit $?)" contains "$out" "Applied network perturbations"
+    ln --interface "$dev" --rollback
+    ln --interface "$dev" --dst_ip 10.10.0.2 --mtu 1400
+    check "the module is loaded when needed (exit $rc)" [ "$rc" -eq 0 ]
+    check "and now loaded" bash -c "lsmod | grep -q ^act_police"
+}
+
 # ---------- tests: updater ----------
 
 test_update() {
@@ -1991,14 +2240,14 @@ all_tests=(
     json_every_option json_persist_and_profile json_namespaces json_errors profile_unknown_key 
     persist_netns persist_container snapshot_all_namespaces namespace_aliases 
     validation_normalization dry_run failed_apply_undone failed_apply_timer_kept bad_logging_path options_without_value value_limits foreign_qdiscs ssh_guard ssh_guard_duration check_clean check_clean_namespace 
-    json_output stats audit_log confirm_within probe optional_dependencies run_in_background run_in_tmux run_in_screen run_in_namespace 
+    json_output stats audit_log confirm_within probe optional_dependencies run_in_background run_in_tmux run_in_screen run_in_namespace  protocol mtu mtu_module new_profiles warnings
     update
 )
 
 # Tests that need the real systemd (persistence units, a real timer), containers or other state shared with the
 # host can't run in an isolated network namespace; everything else can run in parallel (see tests/run_parallel.sh).
 # In a shard, timers are started by stand-ins for systemd-run and systemctl (tests/shim).
-real_systemd_tests=" duration_expires_to_clean netns_timed_rollback check_clean check_clean_namespace "
+real_systemd_tests=" mtu_module duration_expires_to_clean netns_timed_rollback check_clean check_clean_namespace "
 # Tests that only mention --persist or the like in a validation, and are safe in a shard
 shard_safe_tests=" confirm_within optional_dependencies dry_run json_errors failed_apply_undone "
 test_class() {

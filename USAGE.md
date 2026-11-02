@@ -18,6 +18,7 @@ Detailed examples of every Latency Ninja feature. For installation and an overvi
 - [Timed rollback](#timed-rollback)
 - [Dead-man switch](#dead-man-switch)
 - [SSH lockout guard](#ssh-lockout-guard)
+- [Warnings](#warnings)
 - [Dry run](#dry-run)
 - [Probing the effect of the rules](#probing-the-effect-of-the-rules)
 - [Running detached](#running-detached)
@@ -169,6 +170,25 @@ If you give only `--src_ip`, the destination defaults to this host and the persp
 
     sudo ./latencyninja -i eth0 -s 192.168.100.200,192.168.100.201 -l 300
 
+### Protocol
+
+By default the rules affect every protocol to the target. `--protocol tcp|udp|icmp` limits them to one, for example to slow down the database connection and leave ping alone, or the other way round:
+
+    sudo ./latencyninja -i eth0 -d 192.168.100.123:1414 -l 80 --protocol tcp
+    sudo ./latencyninja -i eth0 -d 192.168.100.123 -l 80 --protocol icmp
+
+It combines with ports (tcp and udp only; icmp has no ports, so a port with `--protocol icmp` is refused) and with every other option, and it can be set in a JSON file (`"protocol": "tcp"`). Saved snapshots and persisted rules keep it.
+
+### Smaller MTU
+
+`--mtu <bytes>` reproduces a path whose MTU is smaller than the 1500 bytes of Ethernet, such as a tunnel or a link with extra labels. The packets of the traffic your rules match that are larger than the MTU (counting the IP header, so `--mtu 1400` lets 1400 byte IP packets through) are dropped, in the direction chosen with `--direction`:
+
+    sudo ./latencyninja -i eth0 -d 10.0.5.20 --mtu 1400
+    sudo ./latencyninja -i eth0 -d 10.0.5.20:1414 --mtu 1400 --protocol tcp --direction egress
+    sudo ./latencyninja -i eth0 -d 10.0.5.20 -l 40 --mtu 1450        # together with latency
+
+Packets are dropped silently, like on a path that blocks the ICMP "fragmentation needed" messages. This is the "black hole" that makes connections work for small messages and hang when a large one is sent, and it is what shows whether an application or a tunnel copes with a smaller MTU. Latency Ninja can't send the ICMP reply a real router would, so path MTU discovery doesn't find the new size by itself: test with a lower interface MTU or MSS clamping on the hosts to see how they adapt. An MTU alone is enough for a rule (no latency or loss needed). The MTU is not changed on the interface: only the matching traffic is affected, and rolling back removes it.
+
 ## How values are validated
 
 Every value is validated and cleaned before anything is applied, whether it comes from the command line, a JSON file or a profile. Nothing is ever guessed: a value that can't be understood is rejected with a message instead of being altered.
@@ -201,13 +221,21 @@ List them with their values:
 | `transatlantic` | 80ms | 5ms | | |
 | `transpacific` | 150ms | 10ms | | |
 | `lossy-wifi` | 15ms | 10ms | 3% (+0.5% duplicates) | 20mbit |
+| `ipsec` | | | | MTU 1400 |
+| `gre` | | | | MTU 1476 |
+| `vxlan` | | | | MTU 1450 |
+| `directconnect` | 10ms | 1ms | | |
+| `expressroute` | 10ms | 1ms | | |
+| `mpls` | 30ms | 2ms | | MTU 1496 |
+
+The `ipsec`, `gre` and `vxlan` profiles only lower the MTU, by the overhead of the tunnel over a 1500 byte path (IPsec ESP in tunnel mode varies with the cipher and NAT traversal, 1400 is a safe value). The `directconnect`, `expressroute` and `mpls` profiles are generic values for a dedicated or managed link, not measurements of yours: set `--latency` for your distance. They combine with a tunnel by giving the MTU explicitly, for example `--profile directconnect --mtu 1450`.
 
 Options given explicitly override the profile's values; the others still come from the profile:
 
     sudo ./latencyninja -i eth0 -d 192.168.100.123 --profile 4g --latency 150     # 4G, but with 150 ms
     sudo ./latencyninja -i eth0 -d 192.168.100.123 --profile 3g --rate 500kbit    # a congested 3G link
 
-Create your own profile as a JSON file in `/etc/latencyninja/profiles/` (the file name is the profile name). It uses the same keys as `--json` plus a description:
+Create your own profile as a JSON file in `/etc/latencyninja/profiles/` (the file name is the profile name). It uses the same perturbation keys as `--json` (and `mtu`) plus a description:
 
     sudo mkdir -p /etc/latencyninja/profiles
     sudo tee /etc/latencyninja/profiles/branch-office.json <<'EOF'
@@ -246,6 +274,8 @@ Every option that applies rules can come from a JSON file, including the target 
 | `profile` | profile name | `--profile` |
 | `duration` | string, e.g. `"15m"`, or number of seconds | `--duration` |
 | `confirm_within` | string, e.g. `"2m"`, or number of seconds | `--confirm-within` |
+| `protocol` | `"tcp"`, `"udp"` or `"icmp"` | `--protocol` |
+| `mtu` | number of bytes | `--mtu` |
 | `probe`, `probe_count` | target (`http://`, `https://` or `tcp://host:port`), number | `--probe`, `--probe-count` |
 | `persist` | `true` or `false` | `--persist` |
 | `allow_ssh` | `true` or `false` | `--allow-ssh` |
@@ -360,6 +390,13 @@ Your options:
 - Add `--allow-ssh` (or `"allow_ssh": true` in a JSON file) to apply the rules anyway.
 
 The check is conservative. A session counts as affected when its client address is covered by `--dst_ip` (or `--src_ip`) and the local address by the other side, with port 0 (any), the client's port or the SSH server port. It only looks at sessions whose route goes through the interface being shaped, so rules on a different interface than the one carrying your session aren't blocked. Restoring snapshots (including timed rollbacks) and re-applying persisted rules don't use the guard. Inside `--container`/`--netns`, only SSH sessions in that namespace are considered.
+
+## Warnings
+
+Some rules are accepted but may not do what you expect, so Latency Ninja warns before applying them (also with `--dry-run`). The rules are still applied:
+
+- **IPv6.** If the interface has a global IPv6 address, the warning says the rules only affect IPv4 traffic. Dual-stack hosts often prefer IPv6, so an application may reach your target over IPv6 and not be slowed down. IPv6 is not supported yet.
+- **Default gateway.** If a network in `--dst_ip` or `--src_ip`, without a port, contains the default gateway of the interface, all traffic through the gateway is affected, not only traffic to your targets. Use a more specific address or add a port.
 
 ## Dry run
 

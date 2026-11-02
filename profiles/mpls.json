@@ -1,0 +1,1 @@
+{ "description": "Managed MPLS WAN: moderate latency, the label stack lowers the MTU", "latency": "30", "jitter": "2", "mtu": "1496" }

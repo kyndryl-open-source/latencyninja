@@ -127,3 +127,12 @@ load_ifb_module() {
         $modprobe_path ifb || die "Failed to load the ifb module."
     fi
 }
+
+# Function to load the act_police module, which --mtu uses to drop packets that are too large. It is in the kernel
+# modules package that also has ifb and netem (linux-modules-extra on Ubuntu, kernel-modules-extra on Fedora).
+load_police_module() {
+    [ -n "$mtu" ] || return 0
+    if ! lsmod | grep -q '^act_police'; then
+        $modprobe_path act_police || die "The --mtu option needs the act_police kernel module, which could not be loaded. Install the extra kernel modules (linux-modules-extra on Debian/Ubuntu, kernel-modules-extra on Fedora/Red Hat)."
+    fi
+}

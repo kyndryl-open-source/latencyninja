@@ -47,6 +47,8 @@ get_arguments() {
             -z|--corrupt) process_arg corrupt "" "$@"; shift 2 ;;
             -k|--reorder) process_arg reorder "" "$@"; shift 2 ;;
             -b|--rate) process_arg rate "" "$@"; shift 2 ;;
+            --protocol) process_arg protocol "" "$@"; shift 2 ;;
+            --mtu) process_arg mtu "" "$@"; shift 2 ;;
             -p|--profile) process_arg profile "" "$@"; shift 2 ;;
             --profiles) list_profiles; exit 0 ;;
             -t|--duration) process_arg duration "" "$@"; shift 2 ;;
@@ -114,7 +116,7 @@ parse_arguments() {
 
     # --check and --clean audit Latency Ninja's own state and don't apply rules
     if [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ]; then
-        [ -n "$json_file$eth_interface$src_ip_arg$dst_ip_arg$latency$jitter$packet_loss$duplicate$corrupt$reorder$rate$profile$duration$confirm_within$probe$run_in$save_file$restore_file$apply_persisted" ] || [ "$persist" -eq 1 ] || [ "$rollback_required" -eq 1 ] || [ "$confirm_mode" -eq 1 ] &&
+        [ -n "$json_file$eth_interface$src_ip_arg$dst_ip_arg$latency$jitter$packet_loss$duplicate$corrupt$reorder$rate$protocol$mtu$profile$duration$confirm_within$probe$run_in$save_file$restore_file$apply_persisted" ] || [ "$persist" -eq 1 ] || [ "$rollback_required" -eq 1 ] || [ "$confirm_mode" -eq 1 ] &&
             die "The --check and --clean options can't be combined with options that apply, roll back or restore rules."
         run_check_clean
         local check_status=$?
@@ -211,8 +213,8 @@ parse_arguments() {
         die "Interface, destination or source IP/network are mandatory. Use --help for usage information."
 
     # Validate other mandatory parameters
-    [ -z "$latency" ] && [ -z "$jitter" ] && [ -z "$duplicate" ]  && [ -z "$corrupt" ] && [ -z "$reorder" ] && [ -z "$packet_loss" ] && [ -z "$rate" ] &&
-        die "At least one of the parameters (latency, jitter, duplicate, corrupt, reorder, packet_loss, rate) or a profile must be provided. Use --help for usage information."
+    [ -z "$latency" ] && [ -z "$jitter" ] && [ -z "$duplicate" ]  && [ -z "$corrupt" ] && [ -z "$reorder" ] && [ -z "$packet_loss" ] && [ -z "$rate" ] && [ -z "$mtu" ] &&
+        die "At least one of the parameters (latency, jitter, duplicate, corrupt, reorder, packet_loss, rate, mtu) or a profile must be provided. Use --help for usage information."
 
     # Check that jitter comes with latency (from the command line, JSON or a profile)
     if [ -n "$jitter" ] && [ -z "$latency" ]; then
@@ -235,11 +237,11 @@ trim_value() {
 # validated: spaces around them are removed, and values that aren't case sensitive are lowercased
 normalize_parameters() {
     local name
-    for name in eth_interface profile latency jitter packet_loss duplicate corrupt reorder; do
+    for name in eth_interface profile latency jitter packet_loss duplicate corrupt reorder mtu; do
         trim_value "${!name}"
         declare -g "$name=$trimmed_value"
     done
-    for name in direction rate duration confirm_within; do
+    for name in direction rate protocol duration confirm_within; do
         trim_value "${!name}"
         declare -g "$name=${trimmed_value,,}"
     done
@@ -254,6 +256,7 @@ validate_arguments() {
         [ -n "${!param}" ] && check_numeric "$param"
     done
     [ -n "$rate" ] && validate_rate "$rate"
+    validate_protocol_and_mtu
     if [ -n "$duration" ]; then
         # die() inside $(...) only exits the subshell, so propagate the failure
         duration_seconds=$(parse_duration "$duration") || { echo "$duration_seconds"; exit 1; }
@@ -322,6 +325,34 @@ validate_rate() {
         m["bps"] = 8; m["kbps"] = 8e3; m["mbps"] = 8e6; m["gbps"] = 8e9
         exit !(n * m[u] >= 8 && n * m[u] <= 1e14)
     }' || die "Invalid rate. The rate must be between 1bps (8bit) and 100000gbit."
+}
+
+# Function to validate --protocol and --mtu, and set protocol_number for the filters
+validate_protocol_and_mtu() {
+    local entry
+    if [ -n "$protocol" ]; then
+        case "$protocol" in
+            tcp) protocol_number=6 ;;
+            udp) protocol_number=17 ;;
+            icmp) protocol_number=1 ;;
+            *) die "Invalid protocol: $protocol. Valid options are: tcp, udp or icmp." ;;
+        esac
+        # Ports only exist in TCP and UDP
+        if [ "$protocol" = "icmp" ]; then
+            for entry in "${src_ip[@]}" "${dst_ip[@]}"; do
+                [ "${entry##*:}" = "0" ] || die "The icmp protocol has no ports. Remove the port from $entry or use --protocol tcp or udp."
+            done
+        fi
+    fi
+    [ -n "$mtu" ] && validate_mtu "$mtu"
+    return 0
+}
+
+# Function to validate an MTU (the largest IP packet, in bytes, that the matching traffic can have)
+validate_mtu() {
+    [[ "$1" =~ ^[0-9]{2,5}$ ]] && [ "$((10#$1))" -ge 68 ] && [ "$((10#$1))" -le 65535 ] ||
+        die "Invalid mtu: $1. Use a number of bytes between 68 and 65535."
+    mtu=$((10#$1))
 }
 
 # Function to convert a duration (e.g. 90, 30s, 10m, 2h, 1d) to seconds
@@ -465,6 +496,8 @@ display_params() {
     [ -n "$corrupt" ] && echo "  - Corruption: $corrupt %"
     [ -n "$reorder" ] && echo "  - Reorder: $reorder %"
     [ -n "$rate" ] && echo "  - Rate: $rate"
+    [ -n "$protocol" ] && echo "  - Protocol: $protocol"
+    [ -n "$mtu" ] && echo "  - MTU: $mtu bytes (larger packets are dropped)"
     [ -n "$profile" ] && echo "  - Profile: $profile"
     if [ "$confirm_pending" -eq 1 ]; then
         echo "  - Confirm within: $duration (rolled back automatically unless confirmed)"

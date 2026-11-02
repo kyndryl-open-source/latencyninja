@@ -29,6 +29,13 @@ configure_ingress_traffic_controls() {
 
     swap_ips_if_match # Allows to switch perspective of traffic direction
 
+    # --protocol narrows the match to one IP protocol. --mtu drops the packets larger than the MTU: the police
+    # action only lets packets up to its mtu through, and it sees the Ethernet header (14 bytes) too. The rate
+    # is too high to ever limit anything.
+    local proto_match=() police_action=()
+    [ -n "$protocol" ] && proto_match=(match ip protocol "$protocol_number" 0xff)
+    [ -n "$mtu" ] && police_action=(action police rate 100gbit burst 1m mtu "$((mtu + 14))" conform-exceed drop/ok)
+
     # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
         if [ -n "$latency" ]; then
@@ -69,12 +76,12 @@ configure_ingress_traffic_controls() {
                 stripped_dip="${dip%%:*}"  # Extract IP part before the colon        
                 if [ "$stripped_dprt" != "0" ]; then
                     if [ "$ips_swapped" -eq 1 ]; then
-                        $tc_path filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip dst "$stripped_sip" match ip dport "$stripped_dprt" 0xffff flowid 1:1 || die "Failed to add ingress filter on $ifb0_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                        $tc_path filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip dst "$stripped_sip" match ip dport "$stripped_dprt" 0xffff "${proto_match[@]}" flowid 1:1 "${police_action[@]}" || die "Failed to add ingress filter on $ifb0_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
                     else
-                        $tc_path filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip sport "$stripped_dprt" 0xffff match ip dst "$stripped_sip" flowid 1:1 || die "Failed to add ingress filter on $ifb0_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                        $tc_path filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip sport "$stripped_dprt" 0xffff match ip dst "$stripped_sip" "${proto_match[@]}" flowid 1:1 "${police_action[@]}" || die "Failed to add ingress filter on $ifb0_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
                     fi
                 else
-                    $tc_path filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip dst "$stripped_sip" flowid 1:1 || die "Failed to add ingress filter on $ifb0_interface for $sip to $dip."
+                    $tc_path filter add dev "$ifb0_interface" protocol ip parent 1:0 prio 1 u32 match ip src "$stripped_dip" match ip dst "$stripped_sip" "${proto_match[@]}" flowid 1:1 "${police_action[@]}" || die "Failed to add ingress filter on $ifb0_interface for $sip to $dip."
                 fi
             fi
         done
@@ -98,6 +105,13 @@ configure_egress_traffic_controls() {
     local rate="${11}"
 
     swap_ips_if_match # Allows to switch perspective of traffic direction
+
+    # --protocol narrows the match to one IP protocol. --mtu drops the packets larger than the MTU: the police
+    # action only lets packets up to its mtu through, and it sees the Ethernet header (14 bytes) too. The rate
+    # is too high to ever limit anything.
+    local proto_match=() police_action=()
+    [ -n "$protocol" ] && proto_match=(match ip protocol "$protocol_number" 0xff)
+    [ -n "$mtu" ] && police_action=(action police rate 100gbit burst 1m mtu "$((mtu + 14))" conform-exceed drop/ok)
 
     # Check if direction is "both" and calculate half-latency and half-jitter
     if [ "$direction" == "both" ]; then
@@ -139,12 +153,12 @@ configure_egress_traffic_controls() {
                 stripped_dip="${dip%%:*}"  # Extract IP part before the colon        
                 if [ "$stripped_dprt" != "0" ]; then
                     if [ "$ips_swapped" -eq 1 ]; then
-                        $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip sport $stripped_dprt 0xffff match ip dst $stripped_dip flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                        $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip sport $stripped_dprt 0xffff match ip dst $stripped_dip "${proto_match[@]}" flowid 1:1 "${police_action[@]}" || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
                     else
-                        $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip dst $stripped_dip match ip dport $stripped_dprt 0xffff flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
+                        $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip dst $stripped_dip match ip dport $stripped_dprt 0xffff "${proto_match[@]}" flowid 1:1 "${police_action[@]}" || die "Failed to add ingress filter on $ifb1_interface for $stripped_dip to $stripped_sip on port $stripped_dprt."
                     fi
                 else
-                    $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip dst $stripped_dip flowid 1:1 || die "Failed to add ingress filter on $ifb1_interface for $sip to $dip."
+                    $tc_path filter add dev $ifb1_interface protocol ip parent 1:0 prio 1 u32 match ip src $stripped_sip match ip dst $stripped_dip "${proto_match[@]}" flowid 1:1 "${police_action[@]}" || die "Failed to add ingress filter on $ifb1_interface for $sip to $dip."
                 fi
             fi
         done

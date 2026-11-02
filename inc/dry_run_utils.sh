@@ -42,6 +42,7 @@ dry_run_plan() {
     tc_path=dry_run_tc ip_path=dry_run_ip modprobe_path=dry_run_modprobe
     rollback_required=1 rollback_done=0 replace_foreign_qdiscs=1
     load_ifb_module
+    load_police_module
     rollback_everything silent
     if [ "$direction" == "ingress" ] || [ "$direction" == "both" ]; then
         create_virtual_interface "$ifb0_interface"

@@ -1,0 +1,1 @@
+{ "description": "VXLAN overlay over a 1500 byte path: 50 bytes of overhead", "mtu": "1450" }

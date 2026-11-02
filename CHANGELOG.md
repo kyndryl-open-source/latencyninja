@@ -1,3 +1,12 @@
+CHANGELOG 1.30
+- --protocol tcp|udp|icmp limits the rules to one IP protocol (also with ports for tcp and udp; icmp with a port is refused). "protocol" works in JSON files and is kept by snapshots and persistence
+- --mtu <bytes> drops the packets above that IP size on the matching traffic and direction, to reproduce a tunnel or link with a smaller MTU (a black hole: no ICMP reply is sent). It is a police action on the same ifb filters, so nothing is changed on the interface and rollback removes it. "mtu" works in JSON files and profiles
+- --mtu needs the act_police kernel module (in linux-modules-extra on Ubuntu and kernel-modules-extra on Fedora, like ifb and netem): it is loaded when needed, and --mtu is refused with a message saying what to install if it can't be. --dry-run shows the modprobe
+- New profiles: ipsec (MTU 1400), gre (1476), vxlan (1450), directconnect, expressroute and mpls (generic latency and jitter values, MPLS with MTU 1496)
+- Warnings before applying (and with --dry-run): when the interface has a global IPv6 address, that IPv6 traffic is not affected, and when a network without a port covers the default gateway, that all traffic through it is affected
+- Tests: protocol, mtu, mtu_module, new_profiles and warnings, with a UDP size helper (tests/helpers/udp_mtu.py)
+- Roadmap: 1.30 is done and removed; IPv6 is planned for 3.0
+
 CHANGELOG 1.29
 - Safety for client environments: --confirm-within <time> is a dead-man switch: the rules are applied and rolled back automatically unless they are confirmed with --confirm --interface <iface>. It is the timed rollback of --duration (systemd; not with --persist or --duration), the SSH lockout guard accepts it, and --query, --show-interfaces and their JSON show the rollback as unconfirmed. "confirm_within" works in JSON files
 - Audit log: every change (rules applied, rolled back, restored, confirmed, rolled back by a timer, applied at boot, --clean) and every probe result adds one JSON line to /var/log/latencyninja/audit.log, or --audit-log <path>, with the time (UTC), the user behind sudo (or the timer or boot unit), the SSH client address, host, namespace, command line and values. A bad path is reported before applying; a failure to write while rolling back is only a warning

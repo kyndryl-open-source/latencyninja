@@ -1,0 +1,1 @@
+{ "description": "Dedicated cloud link, e.g. Azure ExpressRoute: low and steady latency (adjust --latency to your distance)", "latency": "10", "jitter": "1" }
