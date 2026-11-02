@@ -73,6 +73,8 @@ log_execution() {
         [ -n "$corrupt" ] && params="${params}Corrupt: ${corrupt}%, "
         [ -n "$reorder" ] && params="${params}Reorder: ${reorder}%, "
         [ -n "$rate" ] && params="${params}Rate: ${rate}, "
+        [ -n "$protocol" ] && params="${params}Protocol: ${protocol}, "
+        [ -n "$mtu" ] && params="${params}MTU: ${mtu}, "
         # Remove trailing comma and space
         params="${params%, }"
         [ -n "$params" ] && echo "  Parameters: $params"

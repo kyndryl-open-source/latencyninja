@@ -14,7 +14,8 @@
 # along with Latency Ninja.  If not, see <https://www.gnu.org/licenses/>.
 
 # Profiles are JSON files with the same perturbation keys as --json (latency, jitter, packet_loss,
-# duplicate, corrupt, reorder, rate) plus a "description". Latency and jitter are round-trip values,
+# duplicate, corrupt, reorder, rate) plus "mtu" (the largest IP packet in bytes, for tunnels and links with
+# a smaller MTU) and a "description". Latency and jitter are round-trip values,
 # like the command line options. Files in $user_profiles_dir override the built-in ones.
 
 # Function to find the file of a profile
@@ -38,10 +39,10 @@ load_profile() {
     file=$(profile_file "$name") || die "Unknown profile: $name. Use --profiles to list the available profiles."
     $jq_path -e 'type == "object"' "$file" &>/dev/null || die "Invalid profile file: $file"
     local unknown
-    unknown=$($jq_path -r 'keys - ["description", "latency", "jitter", "packet_loss", "duplicate", "corrupt", "reorder", "rate"] | join(", ")' "$file")
-    [ -n "$unknown" ] && die "Unknown key(s) in profile $file: $unknown. Valid keys: description latency jitter packet_loss duplicate corrupt reorder rate"
+    unknown=$($jq_path -r 'keys - ["description", "latency", "jitter", "packet_loss", "duplicate", "corrupt", "reorder", "rate", "mtu"] | join(", ")' "$file")
+    [ -n "$unknown" ] && die "Unknown key(s) in profile $file: $unknown. Valid keys: description latency jitter packet_loss duplicate corrupt reorder rate mtu"
 
-    for key in latency jitter packet_loss duplicate corrupt reorder rate; do
+    for key in latency jitter packet_loss duplicate corrupt reorder rate mtu; do
         value=$($jq_path -r --arg k "$key" '.[$k] // empty' "$file")
         # Explicit command line or JSON values take precedence over the profile
         [ -n "$value" ] && [ -z "${!key}" ] && declare -g "$key=$value"
@@ -70,7 +71,8 @@ list_profiles() {
             (if .duplicate then "duplicate \(.duplicate)%" else empty end),
             (if .corrupt then "corrupt \(.corrupt)%" else empty end),
             (if .reorder then "reorder \(.reorder)%" else empty end),
-            (if .rate then "rate \(.rate)" else empty end)
+            (if .rate then "rate \(.rate)" else empty end),
+            (if .mtu then "mtu \(.mtu)" else empty end)
         ] | join(", ")' "$file")
         printf "  %-16s %s%s\n" "$name" "$description" "$origin"
         printf "  %-16s %s\n" "" "$values"

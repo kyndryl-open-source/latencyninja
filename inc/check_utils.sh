@@ -293,7 +293,7 @@ check_old_backups() {
 profile_error() {
     local file="$1" unknown key value error
     $jq_path -e 'type == "object"' "$file" &>/dev/null || { echo "it is not a JSON object"; return; }
-    unknown=$($jq_path -r 'keys - ["description", "latency", "jitter", "packet_loss", "duplicate", "corrupt", "reorder", "rate"] | join(", ")' "$file")
+    unknown=$($jq_path -r 'keys - ["description", "latency", "jitter", "packet_loss", "duplicate", "corrupt", "reorder", "rate", "mtu"] | join(", ")' "$file")
     [ -n "$unknown" ] && { echo "unknown key(s): $unknown"; return; }
     for key in latency jitter packet_loss duplicate corrupt reorder; do
         value=$($jq_path -r --arg k "$key" '.[$k] // empty' "$file")
@@ -302,7 +302,11 @@ profile_error() {
     done
     value=$($jq_path -r '.rate // empty' "$file")
     if [ -n "$value" ]; then
-        error=$(validate_rate "$value" 2>&1) || echo "${error#Error: }"
+        error=$(validate_rate "$value" 2>&1) || { echo "${error#Error: }"; return; }
+    fi
+    value=$($jq_path -r '.mtu // empty' "$file")
+    if [ -n "$value" ]; then
+        error=$(validate_mtu "$value" 2>&1) || echo "${error#Error: }"
     fi
 }
 

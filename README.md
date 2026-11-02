@@ -28,6 +28,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
 * 🛡️ SSH lockout guard: Refuses rules that would affect your own SSH session, unless they roll back automatically.
 * ⏱️ Dead-man switch: `--confirm-within` rolls the rules back unless you confirm them with `--confirm`, so a change that cuts you off undoes itself.
 * 📏 Probes: `--probe` measures what the rules do to a real application (HTTP or TCP, with `curl`), before and after.
+* 🎛️ Protocol and MTU: `--protocol tcp|udp|icmp` limits the rules to one protocol, `--mtu` drops packets above a size to reproduce tunnels and links with a smaller MTU.
 * 📈 Stats and JSON: `--stats` shows the traffic counters, and `--query`, `--show-interfaces`, `--stats` and `--status` print JSON with `--format json`.
 * 🧾 Audit log: every change is recorded, with who made it and from where, one JSON line each.
 * 🖥️ Detached runs: `--run-in background|screen|tmux` keeps a run going if your terminal or SSH session drops.
@@ -56,6 +57,7 @@ This program is distributed under the GNU General Public License (GPL), it is di
       - Debian/Ubuntu: kmod, iproute2, jq
       - Only when the feature is used: `curl` for `--probe` and `--update`, `git` for `--update`, `screen` or `tmux` for `--run-in screen` or `--run-in tmux` (they are installed with the other packages if you accept).
       - `--persist`, `--duration` and `--confirm-within` require systemd.
+      - `--mtu` needs the `act_police` kernel module, from the extra kernel modules package (`linux-modules-extra` on Ubuntu, `kernel-modules-extra` on Fedora), which is loaded when needed.
 2. `root` or `sudo` privileges are required.
 
 ## Compatibility
@@ -85,7 +87,7 @@ See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
                           --dst_ip <destination IP/Network:port~port~port>
                           [--src_ip <source IP/network>]
                           [--direction <direction>]
-                          [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>]
+                          [--latency <latency>] [--jitter <jitter>] [--packet_loss <packet_loss>] [--duplicate <duplicate>] [--corrupt <corrupt>] [--reorder <reorder>] [--rate <rate>] [--protocol <tcp|udp|icmp>] [--mtu <bytes>]
                           [--profile <name>] [--duration <time> | --confirm-within <time>] [--persist]
                           [--probe <target>] [--run-in <background|screen|tmux>]
 
@@ -125,6 +127,8 @@ See **[USAGE.md](USAGE.md)** for detailed examples of every feature.
       -z, --corrupt <corrupt>                         Desired corrupted packet in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
       -k, --reorder <reorder>                         Desired packet reordering in percentage (e.g., 2 for 2% or 0.9 for 0.9%).
       -b, --rate <rate>                               Desired bandwidth limit per direction (e.g., 512kbit, 2mbit, 1gbit).
+      --protocol <tcp|udp|icmp>                       Only affect this protocol (default: all). tcp and udp can be combined with ports.
+      --mtu <bytes>                                   Drop packets larger than this many bytes (an IP packet, e.g., 1400) to reproduce a path with a smaller MTU. Applies to the matching traffic and the chosen direction.
       -p, --profile <name>                            Apply a network profile (e.g., 3g, 4g, satellite). Explicit options override its values.
       --profiles                                      List the available profiles.
       -t, --duration <time>                           Automatically roll back after a duration (e.g., 30s, 10m, 2h), restoring the previous rules.
@@ -359,11 +363,11 @@ To update Latency Ninja to the lastest version, run:
  - Missing Parameters: Always ensure that mandatory parameters like -i and -d are provided, except for when rolling back (using -r), which requires -i only.
 
 ## Roadmap
-- **1.30** IPv6 support, `--protocol tcp|udp|icmp`, port ranges and source ports (filters rewritten with `tc flower`); only redirect matching traffic. WAN realism: `--mtu` and tunnel overhead emulation (IPsec, GRE, VXLAN) to reproduce fragmentation and MSS problems, and link profiles for Direct Connect, ExpressRoute and MPLS. Exclusions for management traffic such as DHCP and ARP, next to the SSH lockout guard (#7).
 - **1.31** More realistic conditions: per-direction values (e.g. `--egress-rate`, and different ingress and egress values in one rule set, #48), burst loss, correlation and jitter distributions, `--blackhole`. A `starlink` profile with asymmetric upload/download.
 - **1.32** Different conditions per destination on one interface and region matrices (`--matrix regions.json`). Cloud profiles: inter-AZ latency and inter-region latency between the major regions of the main cloud providers (e.g. AWS, Azure, Google Cloud, Oracle Cloud) and between providers, usable directly or in matrices.
 - **1.33** Scenarios: multi-step experiments over time (ramps, flapping links, blackout windows), including Starlink-style periodic latency spikes during satellite handovers.
 - **2.0** Packaging (`make install`, .deb/.rpm), man page, bash completion, updater based on release tags, more distributions, an OVA/OVF appliance with a setup wizard (#8) and a TUI (#15). Kubernetes: a container image usable as a sidecar (configured from a JSON ConfigMap, sharing the pod's network namespace) and pod targeting.
+- **3.0** IPv6 support (including NDP exclusions and the SSH lockout guard) on a `tc flower` filter backend.
 
 ## Examples for Testers
 

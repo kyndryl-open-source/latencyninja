@@ -43,6 +43,7 @@ script_dir="$(dirname "$script_path")"
 . "$script_dir/inc/audit_utils.sh"
 . "$script_dir/inc/probe_utils.sh"
 . "$script_dir/inc/run_utils.sh"
+. "$script_dir/inc/warning_utils.sh"
 
 # Global main function
 main() {
@@ -71,6 +72,8 @@ main() {
     # Detach once everything is validated, the detached process runs the command again without --run-in
     [ -n "$run_in" ] && { detach_run "$@"; exit $?; }
     warn_foreign_qdiscs "$eth_interface"
+    warn_ipv6_unaffected
+    warn_gateway_covered
     [ "$dry_run" -eq 1 ] && { dry_run_plan "$@"; exit 0; }
     prepare_default_log_dir "$log_file"
     backup_file="${backup_dir}/latencyninja_tc_backup_$(date +%Y%m%d_%H%M%S)_$$"
@@ -84,6 +87,7 @@ main() {
     trap undo_failed_apply EXIT
     trap 'exit 130' INT TERM HUP
     load_ifb_module
+    load_police_module
     replace_foreign_qdiscs=1
     rollback_everything silent
     probe_baseline

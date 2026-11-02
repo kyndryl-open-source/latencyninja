@@ -17,7 +17,7 @@
 # src_ip/dst_ip can also be arrays, and persist and allow_ssh are booleans. Values in the file override the same
 # options given on the command line. container/netns/pid are handled before entering the namespace
 # (see json_namespace_target in namespace_utils.sh).
-declare -g -a json_keys=(interface src_ip dst_ip direction latency jitter packet_loss duplicate corrupt reorder rate
+declare -g -a json_keys=(interface src_ip dst_ip direction latency jitter packet_loss duplicate corrupt reorder rate protocol mtu
     profile duration confirm_within probe probe_count persist allow_ssh backup logging container netns pid)
 
 # Function to load the options from a JSON file

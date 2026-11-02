@@ -29,7 +29,7 @@ declare -g local_ip="" src_ip=() dst_ip=() src_ip_arg="" dst_ip_arg=""
 declare -g json_file=""
 
 # Network perturbation earameters
-declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder="" rate=""
+declare -g latency="" jitter="" packet_loss="" duplicate="" corrupt="" reorder="" rate="" protocol="" mtu="" protocol_number=""
 
 # Options and Flags
 declare -g direction="both"  # Traffic direction for shaping (options: both, inbound, outbound).

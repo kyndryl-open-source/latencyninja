@@ -42,6 +42,8 @@ build_canonical_args() {
     [ -n "$corrupt" ] && { echo "--corrupt"; echo "$corrupt"; }
     [ -n "$reorder" ] && { echo "--reorder"; echo "$reorder"; }
     [ -n "$rate" ] && { echo "--rate"; echo "$rate"; }
+    [ -n "$protocol" ] && { echo "--protocol"; echo "$protocol"; }
+    [ -n "$mtu" ] && { echo "--mtu"; echo "$mtu"; }
     [ -n "$backup_dir" ] && { echo "--backup"; echo "$backup_dir"; }
     [ -n "$log_file" ] && { echo "--logging"; echo "$log_file"; }
 }
@@ -56,7 +58,7 @@ validate_saved_args() {
             continue
         fi
         case "$arg" in
-            --interface|--src_ip|--dst_ip|--direction|--latency|--jitter|--packet_loss|--duplicate|--corrupt|--reorder|--rate|--backup|--logging)
+            --interface|--src_ip|--dst_ip|--direction|--latency|--jitter|--packet_loss|--duplicate|--corrupt|--reorder|--rate|--protocol|--mtu|--backup|--logging)
                 expect_value=1 ;;
             *) return 1 ;;
         esac

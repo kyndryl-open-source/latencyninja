@@ -68,7 +68,7 @@ audit_event() {
 audit_rule_details() {
     audit_details=("interface=$eth_interface" "direction=$direction" "src_ip=$src_ip_arg" "dst_ip=$dst_ip_arg"
         "latency=$latency" "jitter=$jitter" "packet_loss=$packet_loss" "duplicate=$duplicate" "corrupt=$corrupt"
-        "reorder=$reorder" "rate=$rate" "profile=$profile")
+        "reorder=$reorder" "rate=$rate" "protocol=$protocol" "mtu=$mtu" "profile=$profile")
     if [ "$confirm_pending" -eq 1 ]; then
         audit_details+=("confirm_within=$duration")
     else
