@@ -4,7 +4,10 @@
 #
 # Usage:
 #   tests/vm.sh up [ubuntu|fedora]      Create/start the VM and install dependencies
-#   tests/vm.sh test [ubuntu|fedora]    Run the test suite inside the VM
+#   tests/vm.sh test [distro] [filter]  Run the test suite inside the VM: in parallel without a filter,
+#                                       or one suite with a name filter or @quick (no traffic, no timers)
+#   tests/vm.sh test-all                Run the suite on ubuntu and fedora at the same time (both VMs must be up)
+#   tests/vm.sh test-serial [distro]    Run the whole suite one test after the other
 #   tests/vm.sh reboot-test [distro]    Check --persist rules survive a VM reboot
 #   tests/vm.sh shell [ubuntu|fedora]   Open a shell in the repo directory inside the VM
 #   tests/vm.sh down [ubuntu|fedora]    Stop the VM
@@ -36,13 +39,13 @@ provision() {
             limactl shell "$vm_name" -- sudo bash -c '
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update -qq
-                apt-get install -y -qq kmod iproute2 inetutils-ping curl jq git python3 wireguard-tools podman >/dev/null
+                apt-get install -y -qq kmod iproute2 inetutils-ping curl jq git python3 wireguard-tools podman tmux screen >/dev/null
                 modprobe ifb && modprobe sch_netem || apt-get install -y -qq "linux-modules-extra-$(uname -r)" >/dev/null'
             ;;
         fedora)
             limactl shell "$vm_name" -- sudo bash -c '
-                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools podman kernel-modules-extra-$(uname -r) || \
-                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools podman kernel-modules-extra'
+                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools podman tmux screen kernel-modules-extra-$(uname -r) || \
+                dnf install -y -q kmod iproute iproute-tc iputils curl jq git python3 wireguard-tools podman tmux screen kernel-modules-extra'
             ;;
     esac
 }
@@ -52,7 +55,7 @@ case "$action" in
         if vm_exists; then
             limactl start "$vm_name" --tty=false
         else
-            limactl start --name="$vm_name" --tty=false --cpus=2 --memory=2 --disk=15 \
+            limactl start --name="$vm_name" --tty=false --cpus=4 --memory=4 --disk=15 \
                 --set ".mounts=[{\"location\":\"$repo_dir\",\"writable\":false}]" \
                 "$template"
         fi
@@ -60,6 +63,25 @@ case "$action" in
         echo "VM $vm_name is ready. Run: tests/vm.sh test $distro"
         ;;
     test)
+        # A filter (or @quick) runs one suite in order; without one the tests run in parallel shards
+        if [ $# -ge 3 ]; then
+            limactl shell --workdir "$repo_dir" "$vm_name" -- sudo bash tests/run_tests.sh "${@:3}"
+        else
+            limactl shell --workdir "$repo_dir" "$vm_name" -- sudo bash tests/run_parallel.sh
+        fi
+        ;;
+    test-all)
+        # Every distro at the same time: the run takes as long as the slowest one
+        pids=() status=0
+        for d in ubuntu fedora; do
+            "$0" test "$d" > "/tmp/lntest-$d.log" 2>&1 &
+            pids+=($!)
+        done
+        for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+        for d in ubuntu fedora; do echo "===== $d ====="; tail -n 4 "/tmp/lntest-$d.log"; done
+        exit "$status"
+        ;;
+    test-serial)
         limactl shell --workdir "$repo_dir" "$vm_name" -- sudo bash tests/run_tests.sh "${@:3}"
         ;;
     reboot-test)

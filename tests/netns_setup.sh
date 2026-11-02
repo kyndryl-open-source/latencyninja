@@ -24,8 +24,8 @@ ns="lnpeer"
 dev="ln0"
 peer_dev="lnpeer0"
 helpers_dir="$(cd "$(dirname "$0")" && pwd)/helpers"
-pid_file="/run/latencyninja-test-listener.pid"
-key_dir="/etc/wireguard/latencyninja-test"   # wg AppArmor profile (Ubuntu) only reads keys here
+pid_file="${LN_PID_FILE:-/run/latencyninja-test-listener.pid}"
+key_dir="${LN_KEY_DIR:-/etc/wireguard/latencyninja-test}"   # wg AppArmor profile (Ubuntu) only reads keys here
 
 wg_down() { ip link delete wg0 2>/dev/null || true; }
 
@@ -81,7 +81,8 @@ down() {
     for d in /sys/class/net/ln[ie]-*; do
         [ -e "$d" ] && ip link delete "$(basename "$d")" 2>/dev/null || true
     done
-    rm -rf "$key_dir"
+    # In a parallel shard the directory is a private mount: empty it, never remove the mount point
+    rm -rf "${key_dir:?}"/* 2>/dev/null; rmdir "$key_dir" 2>/dev/null || true
 }
 
 up() {

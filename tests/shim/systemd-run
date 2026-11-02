@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Stand-in for systemd-run in a parallel test shard (see tests/shard.sh): the real one would start the timer
+# in the host's namespaces, shared by every shard. Supports what Latency Ninja uses: a transient timer
+# (--unit, --on-active) that runs a command once; the other options are ignored. The timer is a background
+# process of the shard, recorded in /run/ln-shard/units so the systemctl stand-in can stop and query it.
+units=/run/ln-shard/units
+unit="" seconds="" 
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --unit=*) unit="${1#--unit=}" ;;
+        --on-active=*) seconds="${1#--on-active=}"; seconds="${seconds%s}" ;;
+        --quiet|--timer-property=*|--description=*) ;;
+        *) break ;;
+    esac
+    shift
+done
+[ -n "$unit" ] && [ -n "$seconds" ] && [ $# -gt 0 ] || { echo "systemd-run stand-in: unsupported arguments" >&2; exit 1; }
+mkdir -p "$units"
+[ -f "$units/$unit.timer" ] && kill "$(cat "$units/$unit.timer")" 2>/dev/null
+setsid bash -c 'sleep "$1"; shift; exec "$@"' _ "$seconds" "$@" </dev/null >> "$units/$unit.log" 2>&1 &
+echo $! > "$units/$unit.timer"

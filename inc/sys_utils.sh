@@ -67,14 +67,18 @@ check_system_requirements() {
 
     case $os_type in
         debian|ubuntu)
-            local packages=("kmod" "iproute2" "curl" "jq")
-            # git is only required for --update
+            local packages=("kmod" "iproute2" "jq")
+            # git is only required for --update, curl for --update and --probe, screen or tmux for --run-in
             [[ "$update_requested" -eq 1 ]] && packages+=("git")
+            [[ "$update_requested" -eq 1 || "$probe_requested" -eq 1 ]] && packages+=("curl")
+            [[ "$run_in_requested" == "screen" || "$run_in_requested" == "tmux" ]] && packages+=("$run_in_requested")
             ;;
         centos|fedora|rhel)
-            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "curl" "jq")
-            # git is only required for --update
+            local packages=("kmod" "iproute" "kernel-modules-extra" "iproute-tc" "jq")
+            # git is only required for --update, curl for --update and --probe, screen or tmux for --run-in
             [[ "$update_requested" -eq 1 ]] && packages+=("git")
+            [[ "$update_requested" -eq 1 || "$probe_requested" -eq 1 ]] && packages+=("curl")
+            [[ "$run_in_requested" == "screen" || "$run_in_requested" == "tmux" ]] && packages+=("$run_in_requested")
             ;;
         *)
             echo "Unsupported OS: $os_type"

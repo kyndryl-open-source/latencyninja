@@ -1,3 +1,16 @@
+CHANGELOG 1.29
+- Safety for client environments: --confirm-within <time> is a dead-man switch: the rules are applied and rolled back automatically unless they are confirmed with --confirm --interface <iface>. It is the timed rollback of --duration (systemd; not with --persist or --duration), the SSH lockout guard accepts it, and --query, --show-interfaces and their JSON show the rollback as unconfirmed. "confirm_within" works in JSON files
+- Audit log: every change (rules applied, rolled back, restored, confirmed, rolled back by a timer, applied at boot, --clean) and every probe result adds one JSON line to /var/log/latencyninja/audit.log, or --audit-log <path>, with the time (UTC), the user behind sudo (or the timer or boot unit), the SSH client address, host, namespace, command line and values. A bad path is reported before applying; a failure to write while rolling back is only a warning
+- Detached runs: --run-in background|screen|tmux (--background for the first) validates the command, then runs it detached so a dropped terminal or SSH session doesn't end it, also in --container, --netns and --pid targets. --status [id] lists the runs or shows one, --wait <id> waits for one and exits with its exit code. Output is kept in /run/latencyninja/runs. screen or tmux are only required, and installed with the other packages, when selected
+- Probing: --probe <http://..|https://..|tcp://host:port> measures the target with curl before the rules are applied (a baseline after earlier rules are removed) and again with the rules in place, and shows connect, first byte and total times with the difference; --probe-count sets the requests (default 5). A failing probe only warns. "probe" and "probe_count" work in JSON files
+- JSON output: --format json for --query, --show-interfaces, --stats and --status. The options are now read before --query and --show-interfaces run, so --format and --interface can come after them
+- --stats shows the packets, bytes, drops, overlimits and requeues of the netem qdiscs of every interface with rules, or --interface (text or JSON)
+- The default execution log moved from /tmp/latencyninja.log to /var/log/latencyninja/latencyninja.log (created readable by root and its group only); --logging is unchanged
+- curl is no longer required to apply rules: only --update and --probe need it, and git is still only for --update. Missing packages are installed per requested feature
+- Tests: json_output, stats, audit_log, confirm_within, probe, optional_dependencies, run_in_background, run_in_tmux, run_in_screen and run_in_namespace; the Lima VMs install screen and tmux
+- Tests: the suite runs in parallel in isolated network namespaces (tests/run_parallel.sh, shard.sh and tests/shim, used by tests/vm.sh test), 90 seconds instead of 5 minutes; tests/vm.sh test <distro> @quick runs the tests that need no traffic or timers in 30 seconds, test-all runs ubuntu and fedora at the same time. ping no longer waits 10 seconds for lost replies. The VMs get 4 CPUs. LATENCYNINJA_PERSIST_DIR sets the directory of persisted rules (for tests)
+- Roadmap: 1.29 is done and removed
+
 CHANGELOG 1.28.4
 - tools/bump_version.sh no longer adds a CHANGELOG stub, it only updates version.txt; the CHANGELOG entry is written by hand and CI still requires it (CONTRIBUTING.md updated)
 

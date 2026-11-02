@@ -24,8 +24,12 @@ get_arguments() {
             -h|--help) usage; exit 0 ;;
             -a|--about) about; exit 0 ;;
             -v|--version) version; exit 0;;
-            -q|--query) query; exit 0 ;; 
-            --show-interfaces) show_available_interfaces; exit 0 ;;
+            -q|--query) query_mode=1; shift ;;
+            --show-interfaces) interfaces_mode=1; shift ;;
+            --stats) stats_mode=1; shift ;;
+            --format) process_arg output_format "" "$@"; shift 2 ;;
+            --status) status_mode=1; if [[ -n "$2" && "$2" != -* ]]; then status_id="$2"; shift; fi; shift ;;
+            --wait) process_arg wait_id "" "$@"; shift 2 ;;
             --check) check_mode=1; shift ;;
             --clean) clean_mode=1; shift ;;
             --yes) assume_yes=1; shift ;;
@@ -47,6 +51,14 @@ get_arguments() {
             --profiles) list_profiles; exit 0 ;;
             -t|--duration) process_arg duration "" "$@"; shift 2 ;;
             --timed-rollback) process_arg timed_rollback_file "" "$@"; shift 2 ;;
+            --confirm-within) process_arg confirm_within "" "$@"; shift 2 ;;
+            --confirm) confirm_mode=1; shift ;;
+            --probe) process_arg probe "" "$@"; shift 2 ;;
+            --probe-count) process_arg probe_count "" "$@"; shift 2 ;;
+            --run-in) process_arg run_in "" "$@"; shift 2 ;;
+            --background) run_in="background"; shift ;;
+            --run-id) process_arg run_id "" "$@"; shift 2 ;;
+            --audit-log) process_arg audit_log "" "$@"; shift 2 ;;
             --json) process_arg json_file "" "$@"; shift 2 ;;
             --backup) process_arg backup_dir "" "$@"; shift 2 ;;
             --logging) process_arg log_file "" "$@"; shift 2 ;;
@@ -61,6 +73,15 @@ get_arguments() {
             *) echo "Invalid option: $1"; exit 1 ;;
         esac
     done
+
+    # Modes that only show information. They run after all the options are read, so --format and --interface apply.
+    output_format="${output_format,,}"
+    [[ "$output_format" =~ ^(text|json)$ ]] || die "Invalid format: $output_format. Valid options are: text or json."
+    [ "$query_mode" -eq 1 ] && { query; exit 0; }
+    [ "$interfaces_mode" -eq 1 ] && { show_available_interfaces; exit 0; }
+    [ "$stats_mode" -eq 1 ] && { show_stats; exit $?; }
+    [ "$status_mode" -eq 1 ] && { run_status "$status_id"; exit $?; }
+    [ -n "$wait_id" ] && { run_wait "$wait_id"; exit $?; }
 }
 
 # Function to validate arguments given
@@ -87,16 +108,18 @@ process_arg() {
 parse_arguments() {
     # --dry-run only previews applying rules
     if [ "$dry_run" -eq 1 ]; then
-        [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ] || [ "$rollback_required" -eq 1 ] || [ -n "$save_file$restore_file$apply_persisted$timed_rollback_file" ] &&
-            die "The --dry-run option only previews applying rules. It can't be combined with --check, --clean, --rollback, --save, --restore or --apply-persisted."
+        [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ] || [ "$rollback_required" -eq 1 ] || [ "$confirm_mode" -eq 1 ] || [ -n "$save_file$restore_file$apply_persisted$timed_rollback_file" ] &&
+            die "The --dry-run option only previews applying rules. It can't be combined with --check, --clean, --rollback, --confirm, --save, --restore or --apply-persisted."
     fi
 
     # --check and --clean audit Latency Ninja's own state and don't apply rules
     if [ "$check_mode" -eq 1 ] || [ "$clean_mode" -eq 1 ]; then
-        [ -n "$json_file$eth_interface$src_ip_arg$dst_ip_arg$latency$jitter$packet_loss$duplicate$corrupt$reorder$rate$profile$duration$save_file$restore_file$apply_persisted" ] || [ "$persist" -eq 1 ] || [ "$rollback_required" -eq 1 ] &&
+        [ -n "$json_file$eth_interface$src_ip_arg$dst_ip_arg$latency$jitter$packet_loss$duplicate$corrupt$reorder$rate$profile$duration$confirm_within$probe$run_in$save_file$restore_file$apply_persisted" ] || [ "$persist" -eq 1 ] || [ "$rollback_required" -eq 1 ] || [ "$confirm_mode" -eq 1 ] &&
             die "The --check and --clean options can't be combined with options that apply, roll back or restore rules."
         run_check_clean
-        exit $?
+        local check_status=$?
+        [ "$clean_mode" -eq 1 ] && [ "${#attempted_fixes[@]}" -gt 0 ] && audit_event clean "fixes_attempted=${#attempted_fixes[@]}"
+        exit "$check_status"
     fi
 
     # Options from the JSON file override the same options given on the command line
@@ -115,14 +138,23 @@ parse_arguments() {
     fi
 
     # Modes that don't apply new rules
-    [ -n "$apply_persisted" ] && { apply_persisted_rules "$apply_persisted"; exit $?; }
+    [ -n "$apply_persisted" ] && { audit_actor="boot (persisted rules)"; apply_persisted_rules "$apply_persisted"; exit $?; }
     [ -n "$save_file" ] && { save_snapshot "$save_file" "$eth_interface"; exit $?; }
-    [ -n "$restore_file" ] && { restore_snapshot "$restore_file" "$eth_interface"; exit $?; }
+    [ -n "$restore_file" ] && {
+        restore_snapshot "$restore_file" "$eth_interface"
+        local restore_status=$?
+        [ "$restore_status" -eq 0 ] && audit_event restore "file=$restore_file" "interface=$eth_interface"
+        exit "$restore_status"
+    }
 
-    # Check that -r is used with -i
+    # Check that -r and --confirm are used with -i
     if [ "$rollback_required" -eq 1 ] && [ "$interface_provided" -eq 0 ]; then
         die "The -r|--rollback option requires the -i|--interface option."
     fi
+    if [ "$confirm_mode" -eq 1 ] && [ "$interface_provided" -eq 0 ]; then
+        die "The --confirm option requires the -i|--interface option."
+    fi
+    [ "$confirm_mode" -eq 1 ] && [ "$rollback_required" -eq 1 ] && die "The --confirm option can't be combined with --rollback."
 
     # Validate the selected interface
     if [ -z "$eth_interface" ] || ! $ip_path link show "$eth_interface" &>/dev/null; then
@@ -130,21 +162,32 @@ parse_arguments() {
     fi
     set_ifb_interfaces "$eth_interface"
 
-    [ -n "$timed_rollback_file" ] && { run_timed_rollback "$eth_interface" "$timed_rollback_file"; exit $?; }
+    [ -n "$timed_rollback_file" ] && { audit_actor="systemd timer"; run_timed_rollback "$eth_interface" "$timed_rollback_file"; exit $?; }
+    [ "$confirm_mode" -eq 1 ] && { confirm_rules "$eth_interface"; exit $?; }
 
     if [ "$rollback_required" -eq 1 ]; then
         rollback_everything
         cancel_scheduled_rollback "$eth_interface"
         clear_runtime_state "$eth_interface"
         [ "$keep_persist" -eq 0 ] && unpersist_rules "$eth_interface"
+        audit_event rollback "interface=$eth_interface"
         echo -e "\nRolled back network perturbations changes for interface $eth_interface."
         exit 0
     fi
 
+    # --confirm-within is a timed rollback that --confirm cancels: it is scheduled like --duration
+    local duration_option="--duration"
+    if [ -n "$confirm_within" ]; then
+        [ -n "$duration" ] && die "The --confirm-within option can't be combined with --duration, both roll the rules back automatically."
+        duration="$confirm_within"
+        confirm_pending=1
+        duration_option="--confirm-within"
+    fi
+
     [ "$persist" -eq 1 ] && check_persist_supported
     if [ -n "$duration" ]; then
-        [ "$persist" -eq 1 ] && die "The --duration option cannot be combined with --persist."
-        command -v systemd-run &>/dev/null && [ -d /run/systemd/system ] || die "The --duration option requires systemd."
+        [ "$persist" -eq 1 ] && die "The $duration_option option cannot be combined with --persist."
+        command -v systemd-run &>/dev/null && [ -d /run/systemd/system ] || die "The $duration_option option requires systemd."
     fi
     
     local_ip=$($ip_path -o -4 address show dev "$eth_interface" | awk 'NR==1 {print $4}' | cut -d'/' -f1)
@@ -196,7 +239,7 @@ normalize_parameters() {
         trim_value "${!name}"
         declare -g "$name=$trimmed_value"
     done
-    for name in direction rate duration; do
+    for name in direction rate duration confirm_within; do
         trim_value "${!name}"
         declare -g "$name=${trimmed_value,,}"
     done
@@ -224,6 +267,8 @@ validate_arguments() {
         { [ -n "$jitter" ] && ! awk -v v="$jitter" -v m="$max_delay_ms" 'BEGIN{exit !(v<=m)}'; } &&
             die "Latency and jitter can't be more than $max_delay_ms ms in one direction (a limit of tc)."
     fi
+    validate_probe
+    validate_run_in
     warn_suspicious_parameters
 }
 
@@ -421,7 +466,12 @@ display_params() {
     [ -n "$reorder" ] && echo "  - Reorder: $reorder %"
     [ -n "$rate" ] && echo "  - Rate: $rate"
     [ -n "$profile" ] && echo "  - Profile: $profile"
-    [ -n "$duration" ] && echo "  - Duration: $duration (automatic rollback)"
+    if [ "$confirm_pending" -eq 1 ]; then
+        echo "  - Confirm within: $duration (rolled back automatically unless confirmed)"
+    elif [ -n "$duration" ]; then
+        echo "  - Duration: $duration (automatic rollback)"
+    fi
+    [ -n "$probe" ] && echo "  - Probe: $probe ($probe_count requests)"
 
     if [ "$stage" = "Applied" ]; then
         echo
